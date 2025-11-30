@@ -1,0 +1,56 @@
+# 8. Metadata
+
+## 8.1 Metadata Structure
+
+- **Zarr Standard Metadata**: `.zattrs`, `.zgroup`
+- **Format-Specific Metadata**: Custom JSON structure
+- **Schema Validation**: JSON Schema specification
+
+## 8.2 Root-Level Metadata
+
+- Format version
+- Spatial index definition
+- Coordinate system information
+- Resolution levels
+- Geometry types supported
+- Compression methods used
+
+## 8.3 Resolution Level Metadata
+
+- Resolution level identifier
+- Downsampling factor
+- Spatial chunk configuration
+- Array configurations
+- Compression settings
+
+## 8.4 Array-Level Metadata
+
+- Data types
+- Dimensions and shapes
+- Chunking strategy
+- Compression codec and parameters
+- Encoding method (raw, Draco, etc.)
+
+## 8.5 Object-Level Metadata
+
+- Object properties
+- Object type (mesh, skeleton, polyline, etc.)
+- Object identifiers
+- Custom attributes
+
+## 8.6 Group-Level Metadata
+
+- Group properties
+- Group hierarchy
+- Shared attributes
+
+## 8.7 Point-Level Metadata
+
+- Stored in attributes array
+- Channel definitions
+- Attribute schemas
+
+## 8.8 Coordinate Reference System (CRS)
+
+- follows RFC 4 and 5 of ome-zarr
+
