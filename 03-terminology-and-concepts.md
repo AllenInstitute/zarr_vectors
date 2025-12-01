@@ -5,10 +5,11 @@
 - **Spatial Index**: N-dimensional coordinate system for organizing data (may include time)
 - **Spatial Chunk**: A region in spatial index space containing vector data
 - **Vertex**: A point in N-dimensional space with associated data
-- **Object**: A collection of vertices forming a geometric entity (mesh, polyline, etc.)
+- **Vertex Group**: A set of vertices contained within a spatial chunk that are decoded in a from a contiguous set of bytes
+- **Object**: A collection of vertices forming a geometric entity (mesh, polyline, etc.) that spans all spatial chunks
 - **Group**: A collection of objects with shared metadata
 - **Ragged Array**: Variable-length arrays within spatial chunks
-- **Channel Dimension**: Dimension for vertex attributes (e.g., gene expression channels)
+- **Channel Dimension**: Dimension for attribute metadata on vertices, objects, or groups (e.g., gene expression channels, streamline source and target region, cell-type name)
 
 ## 3.2 Geometry Terms
 
