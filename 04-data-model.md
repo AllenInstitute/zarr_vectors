@@ -11,14 +11,14 @@ Zarr Store Root
 |   |   ├── SID shaped zarr with chunk_scheme CS, chunk = ragged array of N SID dimension points or meshes, written as sequences of K vertex groups. Chunk encoding can be represented by different codecs.  For, example vertex group could be compressed as a draco point cloud or mesh.
 |   ├── Vertex Group Offsets Array (if relevant)
 |   |   ├── SID shaped zarr with chunk_scheme CS, chunk = K x 2 ragged array of byte offsets. Each row [vertex_offset, link_offset] gives the start byte offset for that vertex group in the corresponding vertex positions chunk and vertex links chunk. Enables range reads to extract vertices and links for a subset of vertex groups without reading the full chunk.
-│   ├── Vertex Links Array (if relevant)
-|   |   ├── SID shaped zarr with chunk_scheme CS, chunk = ragged array of M x L array of links (L=1 for skeleton/streamline parents, L=3 for triangle faces, L=4 for tetrahedral meshes)
+│   ├── Vertex Links Array (optional; may be omitted when links_convention: "implicit_sequential")
+|   |   ├── SID shaped zarr with chunk_scheme CS, chunk = ragged array of M x L array of links (L=1 for skeleton/streamline parents, L=3 for triangle faces, L=4 for tetrahedral meshes). When links_convention: "implicit_sequential_with_branches", stores only non-sequential (branch) links; sequential links implicit.
 │   ├── Vertex Attributes Arrays (optional)
 |   |   ├── attribute1 SID + C shaped zarr with chunk scheme CS + (something for C), chunk is ragged array of N x C chunk size array of attribute data 
 |   |   ├── attribute2 SID + C shaped zarr, with chunk scheme CS + (something for C) chunk is ragged array of N x C chunk size array of second set of attribute data
 |   |   ├── ...
-│   ├── Object Index Array
-|   |   ├── O x ragged array of multiples of len(SID)+1 zarr array. Each entry references manifest of SID chunk + vertex group index of items that should be included for this object.  For example in an XYZ SID,[ [[1,1,1,1], [1,1,1,2]], [[1,1,1,3] , [1,1,2,1], [1,1,2,2] ], would indicate that there are 2 objects. The first has 2 vertex groups, involving the first two vertex groups of chunk 1,1,1.  The second is composed of three vertex groups, the 3rd group of chunk 1,1,1 and the first two vertex groups of chunk 1,1,2. 
+│   ├── Object Index Array (optional; may be omitted when object_index_convention: "identity")
+|   |   ├── O x ragged array of multiples of len(SID)+1 zarr array. Each entry references manifest of SID chunk + vertex group index of items that should be included for this object.  For example in an XYZ SID,[ [[1,1,1,1], [1,1,1,2]], [[1,1,1,3] , [1,1,2,1], [1,1,2,2] ], would indicate that there are 2 objects. The first has 2 vertex groups, involving the first two vertex groups of chunk 1,1,1.  The second is composed of three vertex groups, the 3rd group of chunk 1,1,1 and the first two vertex groups of chunk 1,1,2. When object_index_convention is "identity" (one vertex per object), this array is omitted; object_id = vertex_group_index in canonical chunk order. 
 │   ├── Object Attributes Arrays (optional)
 |   |   ├── attribute1: O x C shaped zarr array of object level attributes
 |   |   ├── attribute2: O x C shaped zarr array of object level attributes

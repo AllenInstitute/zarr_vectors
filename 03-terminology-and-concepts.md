@@ -29,7 +29,7 @@
 ## 3.4 Indexing Terms
 
 - **Spatial Index Chunk**: A region in spatial index space
-- **Object Index**: Index mapping object IDs to spatial locations
+- **Object Index**: Index mapping object IDs to spatial locations (optional; may be omitted when `object_index_convention: "identity"` — one vertex per object, object_id = vertex_group_index in canonical order)
 - **Cross-Chunk Link**: Connection between objects in different spatial chunks
 - **Resolution Level**: A level in the multi-resolution hierarchy
 

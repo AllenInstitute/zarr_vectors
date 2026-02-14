@@ -23,6 +23,7 @@
   - Vertex positions
   - Parent links (tree structure)
   - Branch handling
+- **Implicit links** (`links_convention: "implicit_sequential_with_branches"`): Sequential links (parent = i−1) implicit; links array stores only branch points.
 - **Compression**: Diff encoding for sequential parents
 - **Multi-Resolution**: Path simplification
 
@@ -30,6 +31,7 @@
 
 - **Structure**: Ordered sequences of points
 - **Storage**: Consecutive vertices in groupings
+- **Implicit links** (`links_convention: "implicit_sequential"`): Within a vertex group, vertex i → i+1; links array omitted when no branching.
 - **Object Groupings**: One polyline per grouping entry
 - **Multi-Resolution**: Point reduction along paths
 

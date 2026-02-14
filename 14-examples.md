@@ -13,7 +13,7 @@ This section gives concrete store layouts and use-case details for the data mode
 ```
 mouse_brain_nuclei.zarr/
 ├── .zgroup
-├── .zattrs                    # spatial_index_dims: [x, y, z], chunk_shape: [256, 256, 256], CRS
+├── .zattrs                    # spatial_index_dims, chunk_shape, CRS, object_index_convention: "identity"
 ├── resolution_0/
 │   ├── vertices/
 │   │   ├── .zarray             # XYZ positions, SID chunk-aligned
@@ -30,10 +30,7 @@ mouse_brain_nuclei.zarr/
 │   │       ├── .zarray         # µm³ per nucleus, SID chunk-aligned
 │   │       ├── 0.0.0
 │   │       └── ...
-│   ├── object_index/
-│   │   ├── .zarray             # one object per nucleus
-│   │   └── 0
-│   ├── groupings/              # G groups, one per brain region
+│   ├── groupings/              # G groups, one per brain region (object_id implicit, no object_index)
 │   │   ├── .zarray             # G×ragged: [[n0,n1,...], [n2,n3,...], ...] nucleus indices per region
 │   │   └── 0
 │   ├── groupings_attributes/
@@ -45,7 +42,6 @@ mouse_brain_nuclei.zarr/
 │   ├── vertex_group_offsets/
 │   ├── attributes/
 │   │   └── volume/
-│   ├── object_index/
 │   ├── groupings/
 │   ├── groupings_attributes/
 │   └── .zgroup
@@ -55,12 +51,12 @@ mouse_brain_nuclei.zarr/
 ```
 
 **Notes**:
-- **Objects**: one object per nucleus; each vertex group = one nucleus (single point).
+- **Objects**: one object per nucleus; each vertex group = one nucleus (single point). Object index is **implicit** (`object_index_convention: "identity"`): object_id = vertex_group_index in canonical chunk order; the `object_index` array is omitted.
 - **Vertex attributes**: `volume` (µm³) per nucleus.
 - **Groupings**: one group per brain region; each group = list of nucleus (object) indices.
 - **Group attributes**: `region_name` (e.g. "cortex", "hippocampus", "thalamus").
 - **Multi-resolution**: resolution_0 = full nuclei; resolution_1, resolution_2 = spatially downsampled point clouds for coarse rendering.
-- Access: spatial bounding-box → chunk keys → vertices + volume; by region → groupings → object_index → vertices; coarse preview → resolution_2.
+- Access: spatial bounding-box → chunk keys → vertices + volume; by region → groupings → compute (chunk, vertex_group_index) from object_id → vertices; coarse preview → resolution_2.
 
 ---
 
@@ -116,7 +112,7 @@ drosophila_central_complex_mesh.zarr/
 ```
 mouse_cortex_skeletons.zarr/
 ├── .zgroup
-├── .zattrs                     # spatial_index_dims: [x,y,z], geometry_type: skeleton
+├── .zattrs                     # spatial_index_dims, geometry_type: skeleton, links_convention: "implicit_sequential_with_branches"
 ├── resolution_0/
 │   ├── vertices/
 │   │   ├── .zarray
@@ -129,7 +125,7 @@ mouse_cortex_skeletons.zarr/
 │   │   ├── 2.1.0
 │   │   └── ...
 │   ├── links/
-│   │   ├── .zarray              # M×1 (parent index) or M×2 (child, parent) per chunk
+│   │   ├── .zarray              # M×2 (child, parent): only branch links (parent ≠ child−1); sequential links implicit
 │   │   ├── 2.1.0
 │   │   └── ...
 │   ├── attributes/              # SID chunk-aligned with vertices
@@ -156,6 +152,7 @@ mouse_cortex_skeletons.zarr/
 ```
 
 **Notes**:
+- **Implicit links** (`links_convention: "implicit_sequential_with_branches"`): most skeleton nodes have parent = i−1 (sequential). The `links` array stores **only branch links**—(child, parent) where parent ≠ child−1—plus any links connecting vertex groups. Sequential links are implicit. This dramatically reduces storage (e.g. a 10k-node neuron with 50 branches stores ~50 links instead of ~10k).
 - **Vertex attributes**: `vertex_type` (0=soma, 1=axon, 2=dendrite) and `radius` (µm) per skeleton node; aligned to vertices, same chunk grid.
 - Object index: e.g. neuron 42 → `[(2,1,0,3), (2,1,0,7), (2,1,1,0)]` (vertex groups in chunks 2.1.0 and 2.1.1).
 - Per chunk: `vertex_group_offsets[k]` gives byte range for that vertex group in `vertices` and `links`; client can range-read or decode only those ranges.
@@ -241,7 +238,7 @@ cell_tracks_xyzt.zarr/
 ```
 merfish_celltype.zarr/
 ├── .zgroup
-├── .zattrs                     # spatial_index_dims: [x, y], geometry_type: point_cloud
+├── .zattrs                     # spatial_index_dims, geometry_type, object_index_convention: "identity"
 ├── resolution_0/
 │   ├── vertices/
 │   │   ├── .zarray              # XY (or XYZ) cell positions, ragged per spatial chunk
@@ -249,7 +246,7 @@ merfish_celltype.zarr/
 │   │   ├── 0.1
 │   │   ├── 1.0
 │   │   └── ...
-
+│   ├── vertex_group_offsets/   # optional; K×2 if used for range reads
 │   ├── attributes/
 │   │   ├── gene_expression/     # channel_dim = num_genes, e.g. 500–20k
 │   │   │   ├── .zarray          # (SID..., channel, ragged), chunked by channel
@@ -259,10 +256,7 @@ merfish_celltype.zarr/
 │   │   └── cell_type/
 │   │       ├── .zarray          # (SID..., 1, ragged), uint16 or string code
 │   │       └── 0.0.0            # cell_type id per vertex
-│   ├── object_index/
-│   │   ├── .zarray              # one object per cell, array is 1-N cells (highly compressed)
-│   │   └── 0
-│   ├── groupings/               # G groups (e.g. cell-type clusters)
+│   ├── groupings/               # G groups (e.g. cell-type clusters); object_id implicit, no object_index
 │   │   ├── .zarray              # G×ragged: list of object indices per group
 │   │   └── 0
 │   ├── groupings_attributes/
@@ -276,7 +270,7 @@ merfish_celltype.zarr/
 
 **Semantics**:
 - **Vertices**: one vertex per cell; position = centroid (x, y) or (x, y, z).
-- **Objects**: one object per cell (single-vertex “object”); object_index maps cell ID → (chunk, vertex_group_index).
+- **Objects**: one object per cell (single-vertex “object”); Object index is **implicit** (`object_index_convention: "identity"`): object_id = vertex_group_index in canonical order; the `object_index` array is omitted.
 - **Vertex attributes**:  
   - `gene_expression`: many channels (genes); chunking by channel allows reading a subset of genes.  
   - `cell_type`: single channel (cell type ID or code).
@@ -285,7 +279,7 @@ merfish_celltype.zarr/
 
 **Access patterns**:
 - All cells in a spatial cutout: bounding box → chunk keys → read `vertices` (+ optional `vertex_group_offsets`).
-- All cells of one type: read `groupings` → object indices for that group → use `object_index` to get (chunk, vertex_group_index) → read vertices (and optionally attributes) for those groups.
+- All cells of one type: read `groupings` → object indices for that group → compute (chunk, vertex_group_index) from object_id (implicit mapping) → read vertices (and optionally attributes) for those groups.
 - One gene or a subset of genes: read only the `gene_expression` chunks for the desired channel range.
 - Super-type (e.g. all neurons): use `groupings_attributes/super_type` to select groups, then same as “all cells of one type”.
 
@@ -389,7 +383,7 @@ mfish_spots_cells.zarr/
 ```
 dti_small.trx.zarr/
 ├── .zgroup
-├── .zattrs                     # VOXEL_TO_RASMM, DIMENSIONS, NB_STREAMLINES, NB_VERTICES, CRS
+├── .zattrs                     # VOXEL_TO_RASMM, DIMENSIONS, NB_STREAMLINES, NB_VERTICES, CRS, object_index_convention: "identity", links_convention: "implicit_sequential"
 ├── resolution_0/
 │   ├── vertices/
 │   │   ├── .zarray              # (NB_VERTICES, 3) float16, single chunk
@@ -397,8 +391,6 @@ dti_small.trx.zarr/
 │   ├── groupings/
 │   │   ├── .zarray              # TRX offsets: [0, n0, n0+n1, ...] = start index per streamline
 │   │   └── 0
-│   ├── object_index/
-│   │   └── 0                   # object i → (0, i): single chunk, vertex_group_index = streamline id
 │   ├── attributes/              # dpv
 │   │   ├── fa/
 │   │   │   └── 0
@@ -429,8 +421,8 @@ dti_small.trx.zarr/
 **Notes**:
 - **Single chunk**: SID collapses to one bin; `vertices` and `groupings` have a single chunk key (`0` or `0.0.0`).
 - **No vertex_group_offsets** (optional): TRX uses position-index offsets; `groupings` holds `[0, n0, n0+n1, ...]` so streamline k spans vertices `[offsets[k], offsets[k+1])`.
-- **No links, no cross_chunk_links**: streamlines are ordered point sequences; connectivity is implicit.
-- **Object index**: trivial—object i references `(chunk=0, vertex_group_index=i)`.
+- **Implicit links** (`links_convention: "implicit_sequential"`): streamlines are ordered point sequences; within each vertex group, vertex i connects to i+1. No branching → the `links` array is **omitted** entirely.
+- **Object index**: implicit (`object_index_convention: "identity"`)—single chunk, object_id = vertex_group_index; array omitted.
 - Per §1 and HUMAN_TEXT_DESIGN: when spatial indexing is collapsed to a single dimension, the format closely aligns with TRX.
 
 ---
@@ -444,7 +436,7 @@ dti_small.trx.zarr/
 ```
 dti_tracts.zarr/
 ├── .zgroup
-├── .zattrs                     # spatial_index_dims: [x, y, z], geometry_type: streamline
+├── .zattrs                     # spatial_index_dims, geometry_type: streamline, links_convention: "implicit_sequential"
 ├── resolution_0/               # full resolution (dense points along each streamline)
 │   ├── vertices/
 │   │   ├── .zarray              # XYZ positions, SID chunk-aligned
@@ -499,7 +491,7 @@ dti_tracts.zarr/
 - **Objects**: one object per full streamline (tract). An object is defined by an ordered list of `(chunk, vertex_group_index)` references. The same `(chunk, vertex_group_index)` can appear in multiple objects—streamlines that share a path through a chunk reference the same segment, avoiding duplication.
 - **Object index**: each object’s manifest is an ordered sequence of `(chunk, vertex_group_index)`; concatenating these segments (in order) gives the full streamline. Objects span the volume by chaining segments across chunks.
 - **cross_chunk_links**: explicit links from segment end in chunk A to segment start in chunk B. Format: `(chunk_coords_A + vertex_offset, chunk_coords_B + vertex_offset)`. Enables traversal of the full path when reconstructing an object from its segments. Multiple objects may share the same cross-chunk link when they follow the same path across a boundary.
-- **No links array**: within a segment, connectivity is implicit (point i connects to i+1).
+- **Implicit links** (`links_convention: "implicit_sequential"`): within a segment, connectivity is implicit (point i connects to i+1). No links array; cross_chunk_links handles between-segment connectivity.
 - **Groupings**: tract g = set of streamline (object) indices; e.g. group 0 = arcuate fasciculus streamlines.
 - **Object attributes**: `termination` — O×2 array (channel 0 = source, channel 1 = sink); region id/name for each streamline’s endpoints; enables connectivity queries (e.g. "streamlines from A to B") without loading geometry.
 - **Group attributes**: `tract_name`.

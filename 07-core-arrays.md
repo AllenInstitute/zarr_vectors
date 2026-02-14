@@ -57,6 +57,8 @@
   - Edge connectivity (graphs)
   - Compression: diff encoding for sequential links
 
+- **Implicit sequential links**: For streamlines/polylines, connectivity within a vertex group is implicit: vertex i connects to vertex i+1 (sequential order). When metadata signals `links_convention: "implicit_sequential"`, the `links` array **may be omitted** entirely if there is no branching. For skeletons with tree structure, most parent links are sequential (parent of i is i−1); only branch points have parent ≠ i−1. When `links_convention: "implicit_sequential_with_branches"`, the `links` array stores **only non-sequential (branch) links** within each vertex group; sequential links are implicit. Links that connect vertex groups (e.g. across chunks) remain in `links` or `cross_chunk_links`. See §8.
+
 ## 7.6 Object Index Array (Optional)
 
 - **Name**: `object_index`
@@ -67,6 +69,8 @@
   - Enables finding all chunks containing an object
   - Format: `(spatial_chunk_coords, vertex_group_index)` (or grouping_index)
   - When `vertex_group_offsets` is present: use vertex_group_index to look up row k; offsets[k] gives `[vertex_offset, link_offset]` for direct extraction of that object's vertices and links from the chunk
+
+- **Implicit object index**: When each object maps to exactly one (chunk, vertex_group_index) and the mapping is the identity (object_id = vertex_group_index in canonical ordering), storing an explicit `object_index` is redundant. This occurs when there is one vertex per object (e.g. nuclei, cell centroids) or one vertex group per object (e.g. streamlines in a single-chunk store). The `object_index` array **may be omitted** if metadata signals `object_index_convention: "identity"`. Object IDs 0, 1, 2, ... correspond to vertex groups in row-major chunk order (chunks in SID order, vertex groups in order within each chunk). The concept of objects persists: groupings and object_attributes still use object IDs; the mapping is implicit. See §8.
 
 ## 7.7 Cross-Chunk Links Array (Optional)
 
