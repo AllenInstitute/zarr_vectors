@@ -13,7 +13,7 @@ This section gives concrete store layouts and use-case details for the data mode
 ```
 mouse_brain_nuclei.zarr/
 ├── .zgroup
-├── .zattrs                    # spatial_index_dims, chunk_shape, CRS, object_index_convention: "identity"
+├── .zattrs                    # spatial_index_dims, chunk_shape, CRS
 ├── resolution_0/
 │   ├── vertices/
 │   │   ├── .zarray             # XYZ positions, SID chunk-aligned
@@ -30,7 +30,10 @@ mouse_brain_nuclei.zarr/
 │   │       ├── .zarray         # µm³ per nucleus, SID chunk-aligned
 │   │       ├── 0.0.0
 │   │       └── ...
-│   ├── groupings/              # G groups, one per brain region (object_id implicit, no object_index)
+│   ├── object_index/
+│   │   ├── .zarray             # one object per nucleus; maps object_id → (chunk, vertex_group_index)
+│   │   └── 0
+│   ├── groupings/              # G groups, one per brain region
 │   │   ├── .zarray             # G×ragged: [[n0,n1,...], [n2,n3,...], ...] nucleus indices per region
 │   │   └── 0
 │   ├── groupings_attributes/
@@ -42,6 +45,7 @@ mouse_brain_nuclei.zarr/
 │   ├── vertex_group_offsets/
 │   ├── attributes/
 │   │   └── volume/
+│   ├── object_index/
 │   ├── groupings/
 │   ├── groupings_attributes/
 │   └── .zgroup
@@ -51,12 +55,13 @@ mouse_brain_nuclei.zarr/
 ```
 
 **Notes**:
-- **Objects**: one object per nucleus; each vertex group = one nucleus (single point). Object index is **implicit** (`object_index_convention: "identity"`): object_id = vertex_group_index in canonical chunk order; the `object_index` array is omitted.
+- **Objects**: one object per nucleus; each vertex group = one nucleus (single point).
+- **Object index**: required (multi-chunk); maps object_id → (chunk, vertex_group_index).
 - **Vertex attributes**: `volume` (µm³) per nucleus.
 - **Groupings**: one group per brain region; each group = list of nucleus (object) indices.
 - **Group attributes**: `region_name` (e.g. "cortex", "hippocampus", "thalamus").
 - **Multi-resolution**: resolution_0 = full nuclei; resolution_1, resolution_2 = spatially downsampled point clouds for coarse rendering.
-- Access: spatial bounding-box → chunk keys → vertices + volume; by region → groupings → compute (chunk, vertex_group_index) from object_id → vertices; coarse preview → resolution_2.
+- Access: spatial bounding-box → chunk keys → vertices + volume; by region → groupings → object_index → (chunk, vertex_group_index) → vertices; coarse preview → resolution_2.
 
 ---
 
@@ -238,7 +243,7 @@ cell_tracks_xyzt.zarr/
 ```
 merfish_celltype.zarr/
 ├── .zgroup
-├── .zattrs                     # spatial_index_dims, geometry_type, object_index_convention: "identity"
+├── .zattrs                     # spatial_index_dims, geometry_type
 ├── resolution_0/
 │   ├── vertices/
 │   │   ├── .zarray              # XY (or XYZ) cell positions, ragged per spatial chunk
@@ -247,6 +252,9 @@ merfish_celltype.zarr/
 │   │   ├── 1.0
 │   │   └── ...
 │   ├── vertex_group_offsets/   # optional; K×2 if used for range reads
+│   ├── object_index/
+│   │   ├── .zarray             # one object per cell; maps object_id → (chunk, vertex_group_index)
+│   │   └── 0
 │   ├── attributes/
 │   │   ├── gene_expression/     # channel_dim = num_genes, e.g. 500–20k
 │   │   │   ├── .zarray          # (SID..., channel, ragged), chunked by channel
@@ -256,7 +264,7 @@ merfish_celltype.zarr/
 │   │   └── cell_type/
 │   │       ├── .zarray          # (SID..., 1, ragged), uint16 or string code
 │   │       └── 0.0.0            # cell_type id per vertex
-│   ├── groupings/               # G groups (e.g. cell-type clusters); object_id implicit, no object_index
+│   ├── groupings/               # G groups (e.g. cell-type clusters)
 │   │   ├── .zarray              # G×ragged: list of object indices per group
 │   │   └── 0
 │   ├── groupings_attributes/
@@ -270,7 +278,7 @@ merfish_celltype.zarr/
 
 **Semantics**:
 - **Vertices**: one vertex per cell; position = centroid (x, y) or (x, y, z).
-- **Objects**: one object per cell (single-vertex “object”); Object index is **implicit** (`object_index_convention: "identity"`): object_id = vertex_group_index in canonical order; the `object_index` array is omitted.
+- **Objects**: one object per cell (single-vertex “object”); Object index maps object_id → (chunk, vertex_group_index); required for multi-chunk stores.
 - **Vertex attributes**:  
   - `gene_expression`: many channels (genes); chunking by channel allows reading a subset of genes.  
   - `cell_type`: single channel (cell type ID or code).
@@ -279,7 +287,7 @@ merfish_celltype.zarr/
 
 **Access patterns**:
 - All cells in a spatial cutout: bounding box → chunk keys → read `vertices` (+ optional `vertex_group_offsets`).
-- All cells of one type: read `groupings` → object indices for that group → compute (chunk, vertex_group_index) from object_id (implicit mapping) → read vertices (and optionally attributes) for those groups.
+- All cells of one type: read `groupings` → object indices for that group → object_index → (chunk, vertex_group_index) → read vertices (and optionally attributes) for those groups.
 - One gene or a subset of genes: read only the `gene_expression` chunks for the desired channel range.
 - Super-type (e.g. all neurons): use `groupings_attributes/super_type` to select groups, then same as “all cells of one type”.
 
@@ -422,7 +430,7 @@ dti_small.trx.zarr/
 - **Single chunk**: SID collapses to one bin; `vertices` and `groupings` have a single chunk key (`0` or `0.0.0`).
 - **No vertex_group_offsets** (optional): TRX uses position-index offsets; `groupings` holds `[0, n0, n0+n1, ...]` so streamline k spans vertices `[offsets[k], offsets[k+1])`.
 - **Implicit links** (`links_convention: "implicit_sequential"`): streamlines are ordered point sequences; within each vertex group, vertex i connects to i+1. No branching → the `links` array is **omitted** entirely.
-- **Object index**: implicit (`object_index_convention: "identity"`)—single chunk, object_id = vertex_group_index; array omitted.
+- **Object index**: implicit (`object_index_convention: "identity"`)—**single-chunk only**; object_id = vertex_group_index; array omitted.
 - Per §1 and HUMAN_TEXT_DESIGN: when spatial indexing is collapsed to a single dimension, the format closely aligns with TRX.
 
 ---

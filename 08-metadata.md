@@ -22,7 +22,7 @@
 - Spatial chunk configuration
 - Array configurations
 - Compression settings
-- **object_index_convention** (optional): When `"identity"`, the `object_index` array is omitted. Object IDs are implicitly mapped to vertex groups in canonical order (row-major over chunks, then vertex groups within each chunk). Use when there is exactly one vertex per object (e.g. point clouds of cells, nuclei). Groupings and object_attributes still reference object IDs; the client computes (chunk, vertex_group_index) from object_id using the chunk grid and vertex group counts per chunk.
+- **object_index_convention** (optional): When `"identity"`, the `object_index` array is omitted. **Only valid when there is a single spatial chunk.** Object IDs equal vertex group indices (object_id = vertex_group_index). Use for single-chunk stores (e.g. TRX-aligned DTI, small point clouds). When multiple spatial chunks exist, `object_index` is required.
 - **links_convention** (optional): When `"implicit_sequential"`, connectivity within a vertex group is implicit (vertex i → vertex i+1). The `links` array may be omitted if there is no branching (e.g. streamlines, polylines). When `"implicit_sequential_with_branches"`, sequential links (parent = i−1) within a vertex group are implicit; the `links` array stores only branch links (parent ≠ i−1) and links connecting vertex groups. Reduces storage for skeletons where most nodes are sequential.
 
 ## 8.4 Array-Level Metadata

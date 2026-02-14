@@ -70,7 +70,7 @@
   - Format: `(spatial_chunk_coords, vertex_group_index)` (or grouping_index)
   - When `vertex_group_offsets` is present: use vertex_group_index to look up row k; offsets[k] gives `[vertex_offset, link_offset]` for direct extraction of that object's vertices and links from the chunk
 
-- **Implicit object index**: When each object maps to exactly one (chunk, vertex_group_index) and the mapping is the identity (object_id = vertex_group_index in canonical ordering), storing an explicit `object_index` is redundant. This occurs when there is one vertex per object (e.g. nuclei, cell centroids) or one vertex group per object (e.g. streamlines in a single-chunk store). The `object_index` array **may be omitted** if metadata signals `object_index_convention: "identity"`. Object IDs 0, 1, 2, ... correspond to vertex groups in row-major chunk order (chunks in SID order, vertex groups in order within each chunk). The concept of objects persists: groupings and object_attributes still use object IDs; the mapping is implicit. See §8.
+- **Implicit object index** (single-chunk only): When there is **exactly one spatial chunk**, object_id = vertex_group_index. The `object_index` array **may be omitted** if metadata signals `object_index_convention: "identity"`. Use for single-chunk stores (e.g. TRX-aligned DTI, small point clouds). When spatial chunking is used (multiple chunks), the `object_index` array is required; the implicit convention does not apply. See §8.
 
 ## 7.7 Cross-Chunk Links Array (Optional)
 
