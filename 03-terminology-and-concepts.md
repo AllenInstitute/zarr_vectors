@@ -33,3 +33,8 @@
 - **Cross-Chunk Link**: Connection between objects in different spatial chunks
 - **Resolution Level**: A level in the multi-resolution hierarchy
 
+
+
+
+
+

@@ -62,3 +62,8 @@ This use case demonstrates storing neuronal skeletons with spatial organization:
 - **Adding vertex properties**: Properties like radius and compartment are stored per vertex
 - **Reconstructing entire skeleton**: Complete skeletons can be reconstructed from distributed chunks
 
+
+
+
+
+

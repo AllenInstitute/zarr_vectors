@@ -24,8 +24,13 @@
 
 ## 5.4 Naming Conventions
 
-- Array names: `vertices`, `attributes`, `groupings`, `links`, `object_index`
+- Array names: `vertices`, `vertex_group_offsets`, `attributes`, `groupings`, `links`, `object_index`
 - Resolution level names: `resolution_0`, `resolution_1`, etc.
 - Metadata file: `.zattrs`, `.zgroup` (Zarr standard)
 - Custom metadata: `metadata.json` or similar
+
+
+
+
+
 

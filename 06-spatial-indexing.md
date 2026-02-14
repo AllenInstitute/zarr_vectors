@@ -36,3 +36,8 @@
 - **Hilbert Curve**: Space-filling curve indexing (future extension)
 - **Custom Indexing**: Extensibility mechanism
 
+
+
+
+
+

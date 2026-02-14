@@ -10,9 +10,9 @@ Zarr Store Root
 │   ├── Vertex Positions Array
 |   |   ├── SID shaped zarr with chunk_scheme CS, chunk = ragged array of N SID dimension points or meshes, written as sequences of K vertex groups. Chunk encoding can be represented by different codecs.  For, example vertex group could be compressed as a draco point cloud or mesh.
 |   ├── Vertex Group Offsets Array (if relevant)
-|   |   ├── SID shaped zarr with chunk_scheme CS, chunk = K long ragged vector of byte offsets into the corresponding vertex position chunk
+|   |   ├── SID shaped zarr with chunk_scheme CS, chunk = K x 2 ragged array of byte offsets. Each row [vertex_offset, link_offset] gives the start byte offset for that vertex group in the corresponding vertex positions chunk and vertex links chunk. Enables range reads to extract vertices and links for a subset of vertex groups without reading the full chunk.
 │   ├── Vertex Links Array (if relevant)
-|   |   ├── SID shaped zarr with chunk_scheme CS, chunk = ragged array of N x L array of links (L=1 for skeleton/streamline parents, L=3 for triangle faces, L=4 for tetrahedral meshes)
+|   |   ├── SID shaped zarr with chunk_scheme CS, chunk = ragged array of M x L array of links (L=1 for skeleton/streamline parents, L=3 for triangle faces, L=4 for tetrahedral meshes)
 │   ├── Vertex Attributes Arrays (optional)
 |   |   ├── attribute1 SID + C shaped zarr with chunk scheme CS + (something for C), chunk is ragged array of N x C chunk size array of attribute data 
 |   |   ├── attribute2 SID + C shaped zarr, with chunk scheme CS + (something for C) chunk is ragged array of N x C chunk size array of second set of attribute data
@@ -61,4 +61,9 @@ Zarr Store Root
 - **Definition**: Collection of objects with shared properties
 - **Metadata**: Group-level attributes
 - **Hierarchy**: Groups may contain sub-groups
+
+
+
+
+
 

@@ -39,3 +39,8 @@
 - **Custom Links**: User-defined connectivity
 - **Validation**: Geometry-specific validation rules
 
+
+
+
+
+

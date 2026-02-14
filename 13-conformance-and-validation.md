@@ -30,3 +30,8 @@
 - **OME-Zarr Compatibility**: Shared principles
 - **Zarr Compatibility**: Zarr version requirements
 
+
+
+
+
+
