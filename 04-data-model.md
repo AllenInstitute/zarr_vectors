@@ -2,68 +2,205 @@
 
 ## 4.1 Hierarchical Organization
 
+A ZV store is a Zarr v3 group tree.  Resolution levels are bare-integer
+sub-groups (`0/`, `1/`, …); level `0` is full resolution.  Within each
+level, every named array is itself a Zarr group of single-chunk byte
+blobs — the fragment-index, object-index, and link payloads are
+project-internal byte layouts wrapped in 1-D `uint8` arrays.
+
 ```
 Zarr Store Root
-├── Root Metadata
-│   ├── Defines Spatial Index Dimensions (SID) [XY, XYZ, XYZT, etc]]
-├── Resolution Level 0 (full resolution)
-│   ├── Vertex Positions Array
-|   |   ├── SID shaped zarr with chunk_scheme CS, chunk = ragged array of N SID dimension points or meshes, written as sequences of K vertex groups. Chunk encoding can be represented by different codecs.  For, example vertex group could be compressed as a draco point cloud or mesh.
-|   ├── Vertex Group Offsets Array (if relevant)
-|   |   ├── SID shaped zarr with chunk_scheme CS, chunk = K x 2 ragged array of byte offsets. Each row [vertex_offset, link_offset] gives the start byte offset for that vertex group in the corresponding vertex positions chunk and vertex links chunk. Enables range reads to extract vertices and links for a subset of vertex groups without reading the full chunk.
-│   ├── Vertex Links Array (optional; may be omitted when links_convention: "implicit_sequential")
-|   |   ├── SID shaped zarr with chunk_scheme CS, chunk = ragged array of M x L array of links (L=1 for skeleton/streamline parents, L=3 for triangle faces, L=4 for tetrahedral meshes). When links_convention: "implicit_sequential_with_branches", stores only non-sequential (branch) links; sequential links implicit.
-│   ├── Vertex Attributes Arrays (optional)
-|   |   ├── attribute1 SID + C shaped zarr with chunk scheme CS + (something for C), chunk is ragged array of N x C chunk size array of attribute data 
-|   |   ├── attribute2 SID + C shaped zarr, with chunk scheme CS + (something for C) chunk is ragged array of N x C chunk size array of second set of attribute data
-|   |   ├── ...
-│   ├── Object Index Array (optional; may be omitted when object_index_convention: "identity")
-|   |   ├── O x ragged array of multiples of len(SID)+1 zarr array. Each entry references manifest of SID chunk + vertex group index of items that should be included for this object.  For example in an XYZ SID,[ [[1,1,1,1], [1,1,1,2]], [[1,1,1,3] , [1,1,2,1], [1,1,2,2] ], would indicate that there are 2 objects. The first has 2 vertex groups, involving the first two vertex groups of chunk 1,1,1.  The second is composed of three vertex groups, the 3rd group of chunk 1,1,1 and the first two vertex groups of chunk 1,1,2. When object_index_convention is "identity" (single-chunk store only), this array is omitted; object_id = vertex_group_index. 
-│   ├── Object Attributes Arrays (optional)
-|   |   ├── attribute1: O x C shaped zarr array of object level attributes
-|   |   ├── attribute2: O x C shaped zarr array of object level attributes
-|   |   ├── ...
-│   ├── Object Groupings Array (optional)
-|   |   ├── G x ragged array of Object indices that belong to a group. i.e. [[0,1], [1,2], [3,4,5]]  group 0 has objects 0 and 1, group 1 has objects 1 and 2, group 2 has objects 3,4,5. 
-│   ├── Groupings Attribute arrays
-|   |   ├── attribute1: G x C shapped zarr array of group level attributes
-|   |   ├── ...
-│   └── Metadata
-├── Resolution Level 1 (downsampled)
-│   └── [Same structure]
-└── Resolution Level N
+├── zarr.json                          # NGFF multiscales + zarr_vectors metadata
+├── 0/                                 # full resolution
+│   ├── zarr.json                      # level metadata (zarr_vectors_level)
+│   ├── vertices/<i.j.k>               # raw float positions per spatial chunk
+│   ├── vertex_fragments/<i.j.k>       # fragment index over vertices/<i.j.k>
+│   ├── links/0/<i.j.k>                # intra-level link rows (delta=0)
+│   ├── link_fragments/<i.j.k>         # fragment index over links/0/<i.j.k>
+│   ├── vertex_attributes/<name>/<i.j.k>
+│   ├── link_attributes/<name>/0/<i.j.k>            # optional, parallels links
+│   ├── object_index/data              # manifest-block stream (B objects)
+│   ├── object_attributes/<name>/data
+│   ├── groups/data                    # G groups → object id lists
+│   ├── group_attributes/<name>/data
+│   ├── cross_chunk_links/0/data       # same-level cross-chunk records
+│   └── cross_chunk_link_attributes/<name>/0/data
+├── 1/                                 # coarser level (optional)
+│   ├── zarr.json                      # may override chunk_shape (v0.7)
+│   ├── vertices/<i.j.k> …
+│   ├── links/0/<i.j.k>                # intra-level edges at this level
+│   ├── links/+1/<i.j.k>               # optional: fine→coarse pyramid edges
+│   │                                   #   (only when cross_level_storage != "none")
+│   ├── cross_chunk_links/0/data
+│   ├── cross_chunk_links/+1/data      # optional, same gating as above
+│   └── …
+└── N/
 ```
+
+
+Each level carries:
+
+- **Required** at level 0: at least `vertices/`.  Other arrays are
+  optional per geometry type (see §12) and per writer choice.
+- **Optional, schema-defined**: `vertex_fragments/`, `link_fragments/`,
+  `links/`, `vertex_attributes/`, `link_attributes/`, `object_index/`,
+  `object_attributes/`, `groups/`, `group_attributes/`,
+  `cross_chunk_links/`, `cross_chunk_link_attributes/`.
+- **Per-level overrides**: each level may set its own `bin_shape`
+  (coarser bins for pyramid levels), `chunk_shape` (v0.7 — coarser
+  levels may use larger chunks), and a `parent_level` pointer.
 
 ## 4.2 Spatial Index Model
 
-- **Dimensions**: N spatial dimensions (X, Y, Z, T, ...)
-- **Coordinate System**: Specified in metadata (CRS, units, origin)
-- **Chunking Strategy**: Regular grid (extensible to hierarchical)
-- **Chunk Size**: Configurable per dimension
-- **Boundary Handling**: Specified in metadata
+The spatial index is an N-dimensional regular grid.  Its parameters
+live in `RootMetadata`:
+
+- **Axes** (`multiscales[0].axes`, NGFF / OME-Zarr RFC 4): a list of
+  axis descriptors (`name`, `type` ∈ {`"space"`, `"time"`, `"channel"`,
+  custom}, optional UDUNITS-2 `unit`).  NGFF prescribes axis order
+  `time → channel → custom → space`.  Number of space axes is
+  `sid_ndim`, the number of *spatial index* dimensions.
+- **Chunk grid**: a level-0 default `chunk_shape` (positive float per
+  axis).  Pyramid levels may override `chunk_shape` (v0.7) provided
+  the override is a positive integer multiple of the root along every
+  axis — the level-0 chunk grid is the finest, and every coarser
+  level nests cleanly within it.  Cross-level chunk-coord translation
+  is integer division by the per-axis multiplier.
+- **Bin grid** (optional): a `base_bin_shape` finer than `chunk_shape`
+  partitioning each chunk into a regular grid of bins.  When unset,
+  one bin per chunk.  `chunk_shape / bin_shape` must be a non-negative
+  integer per axis.
+- **Bounds**: `(min_corner, max_corner)` — the global extent
+  containing all data.  Bounds are root-only; there are no per-level
+  bounds.
+- **CRS**: optional dict following OME-Zarr RFC 4 / 5 conventions.
 
 ## 4.3 Vertex Model
 
-- **Position**: N-dimensional coordinates (same as spatial index)
-- **Attributes**: Arbitrary number of attribute channels
-- **Object Membership**: Vertex belongs to zero or more objects
-- **Links**: Connections to other vertices (for graphs/meshes)
+Each chunk's `vertices/<i.j.k>` is a flat byte blob holding one row
+per vertex in chunk-local order.  The on-disk dtype and encoding
+(`raw` or `draco`) come from per-array `.zattrs`.
+
+A chunk's vertices are partitioned into **fragments** by the
+sibling `vertex_fragments/<i.j.k>` index.  Each fragment is one of:
+
+- a contiguous **range** `[start, start+count)` of row indices into
+  `vertices/<i.j.k>`, or
+- an explicit **list** of row indices, allowing two fragments to
+  re-use the same underlying vertex rows.
+
+The fragment index is a single byte blob; its layout (header + range
+bitmap + range table + CSR explicit list) is documented in §7.3.
+
+A *fragment* is the unit of:
+
+- pyramid coarsening (each fragment maps to a parent metavertex via
+  `links/+1/`),
+- object membership (manifest blocks reference fragments by chunk-local
+  index),
+- and (when shared) re-use across multiple objects.
+
+Per-vertex attributes (`vertex_attributes/<name>/<i.j.k>`) are
+parallel byte blobs row-aligned to `vertices/<i.j.k>`.
+
 
 ## 4.4 Object Model
 
-- **Definition**: Collection of vertices forming a geometric entity
-- **Storage**: Consecutive vertices in arrays
-- **Metadata**: Object-level attributes
-- **Cross-Chunk Objects**: Objects spanning multiple spatial chunks
+An object is a logical entity (a mesh, a streamline, a cell, a neuron
+skeleton, …) whose vertices may live in many fragments across many
+chunks.
+
+The `object_index/data` blob is a stream of B per-object manifests
+back-to-back.  Each manifest is a list of *manifest blocks* tagged
+with the chunk those fragments live in.  Each block carries the chunk
+coordinates plus a fragment reference in one of three modes:
+
+| Mode | Tag | Payload | Use when |
+|------|-----|---------|----------|
+| 0 (single) | `uint8 0` | `int64 fragment_index` | exactly one fragment in this chunk |
+| 1 (range) | `uint8 1` | `int64 start, int64 count` | a contiguous run of fragments |
+| 2 (explicit) | `uint8 2` | `uint32 count`, `int64 fragment_indices[count]` | arbitrary non-contiguous fragments |
+
+All fragment references are **chunk-local** — they index into
+`vertex_fragments/<chunk_coords>` only, never across chunks.  Writers
+can author chunks independently without coordinating fragment
+numbering with any other chunk.
+
+Fragments may be referenced by more than one object.  When this is in
+use, the store advertises the `shared_fragments` capability token (see
+§8.2); the rename from the pre-0.6 `shared_vertex_groups` token reflects
+the move from contiguous vertex groups to row-level fragment sharing.
+
+An empty manifest serializes as `B = 0` and represents an object that
+was dropped at this level (ID-preserving pyramids leave a hole rather
+than re-numbering).
+
+### Cross-chunk objects
+
+When an object spans chunks, its manifest carries one block per chunk.
+Object reconstruction reads each block's `vertex_fragments/<chunk>`
+entries to discover which rows of `vertices/<chunk>` belong to the
+object, then optionally uses `cross_chunk_links/0/data` to recover
+edges crossing the chunk boundary.
+
+### Identity convention
+
+When the store has exactly one spatial chunk, `object_index_convention =
+"identity"` lets the writer omit `object_index/` entirely; `object_id ==
+fragment_index`.  Multi-chunk stores must use the explicit standard
+convention.
 
 ## 4.5 Group Model
 
-- **Definition**: Collection of objects with shared properties
-- **Metadata**: Group-level attributes
-- **Hierarchy**: Groups may contain sub-groups
+A *group* is a named collection of objects.  Groups live in
+`groups/data` (flat ragged CSR: per-group list of object IDs) with
+optional per-group attributes in `group_attributes/<name>/data` (shape
+`(G,)` or `(G, C)`).
 
+Groups have no spatial extent — they describe arbitrary partitions of
+the object set (cell types, brain regions, fascicle bundles, tract
+names, …).  Group hierarchy is encoded via group-level attributes
+(`super_type`, parent group id, …); the format does not impose a
+tree.
 
+## 4.6 Link Model
 
+Links connect vertices.  Each level has zero or more `links/<delta>/`
+groups, where `<delta>` is the *pyramid-level delta* between the
+endpoints.
 
+- `delta = 0` — same-level edges.  The intra-chunk records live at
+  `links/0/<i.j.k>` (a flat byte payload row-aligned to
+  `link_fragments/<i.j.k>`, which carries the per-fragment partition
+  in the same fragment-index format as `vertex_fragments/`).  Records
+  that cross a chunk boundary at the same level live at
+  `cross_chunk_links/0/data`.
+- `delta ≠ 0` — cross-pyramid-level edges (optional, see §9.6).  The
+  intra-chunk records live at `links/<delta>/<i.j.k>` (inline
+  self-describing header, no `link_fragments/` companion).  Records
+  whose endpoints land in different chunks at the differing level
+  live at `cross_chunk_links/<delta>/data`.
 
+Each link record holds `link_width` endpoints; `link_width = 2`
+encodes a generic edge, `link_width = 3` encodes a mesh face,
+`link_width = 1` encodes a single parent reference (used by metanode
+drill-down).  The `link_width` is carried in the array's `.zattrs`.
 
+Endpoint convention for `cross_chunk_links/<delta>/data`: endpoint 0
+lives at the *owning* level L; endpoints `k > 0` live at `L + delta`.
+
+When the geometry is purely sequential (streamlines, polylines), the
+`links_convention` field on the root metadata lets writers skip
+materializing `links/` entirely.  The `implicit_sequential` and
+`implicit_sequential_with_branches` conventions are documented in
+§7.5 and §12.3-12.4.
+
+Per-link attributes are optional companion arrays:
+
+- `link_attributes/<name>/<delta>/<i.j.k>` — one row per intra-chunk
+  link in the parallel `links/<delta>/<i.j.k>` payload.
+- `cross_chunk_link_attributes/<name>/<delta>/data` — one row per
+  record in `cross_chunk_links/<delta>/data`.
+
+The `link_fragments/` companion exists only at `delta = 0`; for
+non-zero deltas, the inline header already partitions the records.

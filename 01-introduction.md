@@ -13,7 +13,7 @@ The increasing scale of scientific and industrial 3D data presents significant c
 
 Traditional file formats (LAS, PLY, OBJ, STL) were designed for single-file, single-machine workflows. They lack spatial indexing, multi-resolution support, and distributed write capabilities. While newer formats like 3D Tiles and I3S address visualization needs, they are optimized for streaming and lack the flexibility needed for scientific computing and analysis workflows.
 
-The Zarr Vector Format (ZVF) addresses these limitations by providing a cloud-native, spatially-indexed format that supports distributed uncoordinated reads and writes, native multi-resolution representations, and rich metadata—all built on the proven Zarr storage foundation.
+The Zarr Vectors (ZV) format addresses these limitations by providing a cloud-native, spatially-indexed format that supports distributed uncoordinated reads and writes, native multi-resolution representations, fragment- and object-level re-use across resolution levels, and rich metadata—all built on the proven Zarr v3 storage foundation.
 
 ## 1.2 Purpose and Goals
 
@@ -92,10 +92,10 @@ The Zarr Vector Format builds upon and extends concepts from several existing fo
 
 ### 1.4.1 TRX Format (Tractography)
 The TRX format (https://github.com/tee-ar-ex/trx-spec) provides the conceptual foundation:
-- **Path offsets**: TRX's efficient storage of variable-length streamlines inspired the object groupings array
+- **Path offsets**: TRX's efficient storage of variable-length streamlines inspired the per-chunk fragment-index encoding
 - **Channel dimension**: TRX's approach to storing vertex attributes with a channel dimension is adopted
 - **Metadata model**: TRX's flexible metadata structure influenced the multi-level metadata design
-- **Compatibility**: When spatial indexing is collapsed to a single dimension, ZVF closely aligns with TRX
+- **Compatibility**: When spatial indexing is collapsed to a single dimension, ZV closely aligns with TRX
 
 ### 1.4.2 OME-Zarr
 OME-Zarr's multi-resolution approach is adapted for vector data:
@@ -103,13 +103,14 @@ OME-Zarr's multi-resolution approach is adapted for vector data:
 - **Zarr backend**: Both formats leverage Zarr's chunked storage
 - **Metadata standards**: OME-Zarr's metadata conventions (RFC 4, RFC 5) are followed for coordinate reference systems
 - **Extension model**: OME-Zarr's extensibility model influenced the design
+- **Pyramid chunk-size growth**: OME-Zarr scales image pyramids by shrinking voxel size at coarser levels (so the same chunk count covers a larger physical region).  ZV has no voxel concept, so it instead lets each pyramid level override `chunk_shape` directly (v0.7+); coarser levels can use larger chunks while staying nested in the level-0 grid.
 
 ### 1.4.3 Zarr Specification
 Zarr provides the storage foundation:
 - **Chunked arrays**: Zarr's efficient chunked storage enables spatial indexing
-- **Ragged arrays**: Zarr v3's support for variable-length chunks enables efficient storage of variable-length objects
+- **Ragged objects**: per-chunk byte payloads (vertices, fragment-index, links, manifests) carry their own record framing inside Zarr v3 1-D `uint8` arrays — no use of Zarr's variable-length-chunk feature
 - **Store abstraction**: Zarr's store interface enables cloud-native storage
-- **Metadata**: Zarr's `.zattrs` and `.zgroup` files are used for format metadata
+- **Metadata**: Zarr v3's `zarr.json` files carry format metadata under namespaced keys (`zarr_vectors`, `zarr_vectors_level`, `zv_array`)
 
 ### 1.4.4 Precomputed Mesh Format
 The Neuroglancer precomputed mesh format influenced multi-resolution mesh design:
@@ -118,41 +119,41 @@ The Neuroglancer precomputed mesh format influenced multi-resolution mesh design
 - **Draco compression**: Use of Draco for mesh compression
 
 ### 1.4.5 Traditional Formats (LAS, PLY, OBJ, STL)
-While ZVF addresses limitations of traditional formats, it maintains conceptual compatibility:
+While ZV addresses limitations of traditional formats, it maintains conceptual compatibility:
 - **Geometry representation**: Standard concepts (vertices, faces, edges) are preserved
-- **Attribute storage**: Traditional attribute concepts map to ZVF's attribute arrays
+- **Attribute storage**: Traditional attribute concepts map to ZV's attribute arrays
 - **Migration paths**: Clear conversion strategies from traditional formats
 
 ### 1.4.6 Visualization Formats (3D Tiles, I3S)
-ZVF complements visualization-focused formats:
-- **Different goals**: 3D Tiles/I3S optimize for web streaming; ZVF optimizes for analysis
+ZV complements visualization-focused formats:
+- **Different goals**: 3D Tiles/I3S optimize for web streaming; ZV optimizes for analysis
 - **Shared concepts**: Spatial indexing and multi-resolution are common themes
-- **Interoperability**: ZVF data can be converted to visualization formats when needed
+- **Interoperability**: ZV data can be converted to visualization formats when needed
 
 ## 1.5 Key Features
 
 The Zarr Vector Format provides several key features that distinguish it from existing formats:
 
 1. **Spatial Chunking**: Data is organized into spatial chunks, enabling efficient spatial queries
-2. **Ragged Arrays**: Variable-length objects (streamlines, polylines) are stored efficiently using ragged arrays
+2. **Fragment-Indexed Chunks**: Variable-length per-chunk structures (vertices, links, attributes) are partitioned by a compact byte-level fragment index that supports vertex / link / fragment re-use within and across objects
 3. **Selective Attribute Access**: Attributes are stored with a channel dimension, enabling loading of specific attributes
-4. **Object Groupings**: Consecutive storage of object vertices enables efficient object-level access
-5. **Cross-Chunk Linking**: Mechanisms for handling objects that span multiple spatial chunks
-6. **Multi-Resolution Pyramids**: Native support for hierarchical level-of-detail representations
-7. **Distributed Writes**: Uncoordinated writes to different spatial chunks enable parallel processing
+4. **Object Groups**: Object identity is preserved across pyramid levels; group-level metadata partitions objects (cell types, brain regions, tracts, …) without imposing a hierarchy
+5. **Cross-Chunk Linking**: Explicit cross-chunk link arrays handle objects that span multiple spatial chunks
+6. **Multi-Resolution Pyramids**: Per-object pyramids with optional cross-pyramid-level link arrays for fragment-level LOD selection, plus per-level `chunk_shape` overrides for scalable coarse levels
+7. **Distributed Writes**: Uncoordinated writes to different spatial chunks enable parallel processing; chunk-local fragment numbering removes the need for global coordination
 8. **Flexible Compression**: Support for various compression codecs, including Draco for geometry
-9. **Rich Metadata**: JSON-based metadata at multiple levels with schema validation
-10. **Extensibility**: Support for custom geometry types and metadata schemas
+9. **Rich Metadata**: NGFF-compatible metadata at multiple levels with a LinkML schema
+10. **Extensibility**: Support for custom geometry types, custom attributes, and writer-side capability tokens
 
 ## 1.6 Target Audiences
 
 This specification is intended for:
 
-- **Format Implementers**: Developers creating libraries and tools to read/write ZVF files
+- **Format Implementers**: Developers creating libraries and tools to read/write ZV files
 - **Application Developers**: Developers building applications that work with large-scale vector data
 - **Data Scientists**: Researchers and analysts working with point clouds, meshes, and related data
 - **Infrastructure Engineers**: Engineers designing storage and compute systems for 3D data
-- **Format Evaluators**: Those considering ZVF for their use cases and comparing it to alternatives
+- **Format Evaluators**: Those considering ZV for their use cases and comparing it to alternatives
 
 ## 1.7 Document Structure
 
