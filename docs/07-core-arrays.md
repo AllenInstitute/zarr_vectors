@@ -28,7 +28,7 @@ not store `num_fragments` outside the blob).
 - **Spatial locality**: rows lie within the chunk's spatial bounds
   modulo boundary policy (writers may keep vertices physically outside
   the bin grid when they belong to objects that straddle a boundary;
-  see §6.4 and §10).
+  see [§6.4](06-spatial-indexing.md#64-boundary-conditions) and [§10](10-cross-chunk-linking.md)).
 
 ## 7.2 Vertex Attributes
 
@@ -120,7 +120,7 @@ parent id, …); the format does not impose a tree.
 - **`<delta>` axis**: the *pyramid-level delta* between the two link
   endpoints.  `delta = 0` is mandatory whenever the geometry has
   explicit links; `delta ≠ 0` is optional and only emitted when
-  `cross_level_storage != "none"` (see §9.6).
+  `cross_level_storage != "none"` (see [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).
 
 ### delta = 0 (intra-level)
 
@@ -128,7 +128,7 @@ parent id, …); the format does not impose a tree.
   `link_width` × `int64` vertex-row indices.  Vertex indices are
   chunk-local (they reference rows of `vertices/<i.j.k>`).
 - **Companion**: `link_fragments/<i.j.k>` — fragment index in the
-  same v1 byte layout as §7.3 — carries the per-fragment partition of
+  same v1 byte layout as [§7.3](#73-vertex-fragments) — carries the per-fragment partition of
   link rows.  Each link fragment is the set of link rows belonging to
   one vertex fragment (so `link_fragments` partitions
   `links/0/<i.j.k>` row-for-row in parallel with how
@@ -229,8 +229,8 @@ the explicit standard convention (`object_index_convention =
   `delta = 0` both endpoints are at the same level; for `delta ≠ 0`
   endpoint 0 is at level L and the remaining endpoints are at level
   `L + delta` (which may have a different `chunk_shape` and therefore
-  a different chunk grid — see §9.6).
-- **`link_width` values**: same as §7.5 — `2` for edges, `3` for
+  a different chunk grid — see [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).
+- **`link_width` values**: same as [§7.5](#75-vertex-links) — `2` for edges, `3` for
   triangle faces (the v0.5 replacement for the dropped
   `cross_chunk_faces/` array), `1` for single child references in
   metanode drill-down.
@@ -244,7 +244,7 @@ the explicit standard convention (`object_index_convention =
 - **Path**: `<level>/link_attributes/<name>/<delta>/<i.j.k>`.
 - **Payload**: row-aligned to `links/<delta>/<i.j.k>`.  One row per
   link record.  Shape `(M_k,)` or `(M_k, C)`.
-- **`.zattrs`**: same shape as §7.2.
+- **`.zattrs`**: same shape as [§7.2](#72-vertex-attributes).
 - **Optional**: emitted only when the writer chose to carry per-link
   attributes; absent by default.
 

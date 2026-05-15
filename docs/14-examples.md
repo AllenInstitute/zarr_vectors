@@ -120,7 +120,7 @@ mouse_brain_nuclei.zarr/
 - **Multi-resolution**: per-object pyramid with coarser `bin_shape`
   at each level; coarse levels may grow `chunk_shape` (v0.7) to
   amortise overhead.  `+1` / `-1` cross-pyramid-level link arrays
-  drill from fine to coarse — see §9.6.
+  drill from fine to coarse — see [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional).
 
 ---
 
@@ -211,7 +211,7 @@ drosophila_central_complex_mesh.zarr/
   bin-shape than level 0's, but the grids nest exactly: a level-0
   chunk `(2,3,4)` lives inside the level-1 chunk `(1,1,2)`.
 - `links/+1/`, `cross_chunk_links/+1/`: optional fine→coarse mapping
-  per §9.6.  A `+1` record at level 0 carries `(chunk_0, vi_0)` at
+  per [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional).  A `+1` record at level 0 carries `(chunk_0, vi_0)` at
   level 0 and `(chunk_1, vi_1)` at level 1 — the chunk coords differ
   because of chunk-scale growth.
 
@@ -414,7 +414,7 @@ merfish_celltype.zarr/
   count is large enough that channel-axis chunking is desirable,
   the store rechunks along the gene axis using `chunk_dims =
   ["gene","dim0","dim1"]` with per-bin `chunk_attribute_values`
-  (see §8.3 and the `rechunk` workflow).
+  (see [§8.3](08-metadata.md#83-resolution-level-metadata) and the `rechunk` workflow).
 - **groups** + **group_attributes/super_type**: hierarchical typing
   is expressed via group attributes, not parent-pointer structure.
 

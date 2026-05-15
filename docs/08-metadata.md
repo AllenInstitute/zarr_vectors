@@ -37,7 +37,7 @@ RFC 4 / 5 layout); they are **not** duplicated under `"zarr_vectors"`
 | `reduction_factor`          | int ≥ 2                                 | Multi-resolution threshold (a new level is emitted only when vertex count drops by ≥ this factor).  Default 8. |
 | `base_bin_shape`            | `[float, ...] \| null`                  | Level-0 bin edge lengths.  When unset, defaults to `chunk_shape` (one bin per chunk).  `chunk_shape / base_bin_shape` must be integer per axis. |
 | `cross_level_depth`         | int (default 1)                         | Max `|delta|` materialized for multiscale-link arrays.  `0` disables, `N` emits ±1…±N, `-1` walks all adjacent level pairs. |
-| `cross_level_storage`       | `"none" \| "implicit" \| "explicit"`    | Optionality knob for cross-pyramid-level links (§9.6).  Default `"explicit"`. |
+| `cross_level_storage`       | `"none" \| "implicit" \| "explicit"`    | Optionality knob for cross-pyramid-level links ([§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).  Default `"explicit"`. |
 | `format_capabilities`       | `list[string]`                          | Capability tokens this store uses (see below).  Empty list when omitted. |
 
 NGFF axes (`zarr.json["multiscales"][0]["axes"]`) are a list of

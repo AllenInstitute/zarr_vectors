@@ -11,7 +11,7 @@
   point clouds have no edges; the `links/` array group is absent.
 - **Spatial Indexing**: direct spatial chunking; per-chunk
   fragmentation lets readers slice to single bins without decoding
-  the whole chunk (see §6.3).
+  the whole chunk (see [§6.3](06-spatial-indexing.md#63-spatial-query-semantics)).
 - **Multi-Resolution**: per-object coarsening reduces each surviving
   object's vertices to a single coarse-bin centroid metavertex per
   level.
@@ -82,5 +82,5 @@
   vertex + link arrays and skip conformance checks for that type.
 - **Custom links**: arbitrary `link_width` and arbitrary record
   semantics are supported by the underlying record format.
-- **Validation**: level-4 conformance checks (§13.1) apply only to
+- **Validation**: level-4 conformance checks ([§13.1](13-conformance-and-validation.md#131-conformance-levels)) apply only to
   the canonical geometry-type set; custom types bypass them.

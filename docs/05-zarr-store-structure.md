@@ -83,14 +83,14 @@ A ZV store is a **Zarr v3 group** at its root.  Its on-disk layout
   attributes, object_index, groups, cross-chunk links, …) is a
   **1-D `uint8`, single-chunk-per-coord** array — a project-internal
   byte layout wrapped in a Zarr group.  The internal layouts (fragment
-  index, manifest-block stream, link payloads) are documented in §7;
+  index, manifest-block stream, link payloads) are documented in [§7](07-core-arrays.md);
   Zarr handles compression and storage, not record framing.
 - **No ragged-array codec required**: ragged structure is expressed by
   the byte-blob layouts above, not by Zarr v3's variable-length-chunk
   feature.
 - **Codecs used**: Blosc + Zstd (`clevel=5`, `shuffle=1`/BYTE for
   positions / attributes / fragment-index / object_index;
-  `shuffle=2`/BITSHUFFLE for `links`).  See §11 and the
+  `shuffle=2`/BITSHUFFLE for `links`).  See [§11](11-compression-and-encoding.md) and the
   `zarr_vectors.encoding.compression` map.
 
 ## 5.3 Store Backend Requirements
@@ -129,7 +129,7 @@ implementation (`zarr_vectors.constants`):
 | `links`                         | per-(delta, chunk) link byte blobs                           |
 | `vertex_attributes`             | per-(name, chunk) attribute blobs, row-aligned to vertices   |
 | `link_attributes`               | per-(name, delta, chunk) attribute blobs                     |
-| `object_index`                  | flat manifest-block stream (§7.6)                            |
+| `object_index`                  | flat manifest-block stream ([§7.6](07-core-arrays.md#76-object-index))                            |
 | `object_attributes`             | per-(name) dense object-row arrays                           |
 | `groups`                        | flat ragged CSR — object ids per group                       |
 | `group_attributes`              | per-(name) dense group-row arrays                            |

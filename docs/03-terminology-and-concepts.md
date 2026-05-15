@@ -21,11 +21,11 @@
 - **Fragment Index**: The per-chunk byte layout that describes the
   F fragments inside one chunk's `vertex_fragments/<chunk>` (or
   `link_fragments/<chunk>`).  Header + range bitmap + range table +
-  CSR explicit list (§7.3).
+  CSR explicit list ([§7.3](07-core-arrays.md#73-vertex-fragments)).
 - **Manifest Block**: One entry in an object's per-object manifest in
   `object_index/data`.  Names a chunk and references one or more
   fragments within that chunk via mode-0 (single), mode-1 (range),
-  or mode-2 (explicit) encoding (§7.6).
+  or mode-2 (explicit) encoding ([§7.6](07-core-arrays.md#76-object-index)).
 - **Object**: A logical entity (a mesh, a streamline, a cell, a
   neuron, …) whose vertices may live in many fragments across many
   chunks.  Identified by a dense object ID `[0, B)`.
@@ -86,7 +86,7 @@
 - **Pyramid-Level Delta**: The `<delta>` segment in
   `links/<delta>/<chunk>` / `cross_chunk_links/<delta>/data` paths.
   `delta = 0` is intra-level; `delta ≠ 0` is cross-pyramid-level
-  (optional — see §9.6).
+  (optional — see [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).
 
 ## 3.5 Convention Terms
 
@@ -101,13 +101,13 @@
   is represented.
 - **`cross_level_storage`** ∈ `{"none", "implicit", "explicit"}`:
   whether (and which direction) of cross-pyramid-level link arrays
-  to materialize (§9.6).
+  to materialize ([§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).
 - **`coarsening_method`** ∈ `{"per_object", "manual", "none"}`: how
   a pyramid level was generated.
 
 ## 3.6 Capability Tokens
 
-Optional features advertised in `format_capabilities` (see §8.2):
+Optional features advertised in `format_capabilities` (see [§8.2](08-metadata.md#82-root-level-metadata)):
 
 - **`fragment_index`** — store uses the v0.6 fragment-index encoding
   (mandatory for 0.6+).

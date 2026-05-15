@@ -20,7 +20,7 @@ the level-0 chunk shape:
 - **Reference system**: optional OME-Zarr RFC 4 / 5 `crs` dict, with
   per-axis UDUNITS-2 units on the NGFF axes.
 
-Per-level overrides (v0.7) are allowed and described in §6.6.
+Per-level overrides (v0.7) are allowed and described in [§6.6](#66-per-level-chunk-shape-v07).
 
 ## 6.2 Spatial Chunk Addressing
 
@@ -62,7 +62,7 @@ Readers fetch only the chunks that exist within this set.  When the
 store has a bin grid (`base_bin_shape != null`), per-chunk filtering
 can narrow further to individual bins using the fragment-index
 boundaries — point clouds use the bin layout so that a single chunk
-read can be sub-divided cheaply (see §7.3 and the per-bin fragment
+read can be sub-divided cheaply (see [§7.3](07-core-arrays.md#73-vertex-fragments) and the per-bin fragment
 mapping in `zarr_vectors.spatial.chunking`).
 
 Point-in-volume queries reduce to one chunk lookup followed by a
@@ -120,4 +120,4 @@ amortise the per-chunk overhead by holding bigger physical regions.
 The cost: when `r_i > 1`, a level-N chunk physically covers a region
 spanning multiple level-(N-1) chunks, so cross-pyramid-level link
 arrays carry both endpoints' chunk coords explicitly (the record
-format already supports this — see §7.7 and §9.6).
+format already supports this — see [§7.7](07-core-arrays.md#77-cross-chunk-links) and [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).

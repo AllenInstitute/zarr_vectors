@@ -41,7 +41,7 @@ Zarr Store Root
 Each level carries:
 
 - **Required** at level 0: at least `vertices/`.  Other arrays are
-  optional per geometry type (see §12) and per writer choice.
+  optional per geometry type (see [§12](12-geometry-types.md)) and per writer choice.
 - **Optional, schema-defined**: `vertex_fragments/`, `link_fragments/`,
   `links/`, `vertex_attributes/`, `link_attributes/`, `object_index/`,
   `object_attributes/`, `groups/`, `group_attributes/`,
@@ -90,7 +90,7 @@ sibling `vertex_fragments/<i.j.k>` index.  Each fragment is one of:
   re-use the same underlying vertex rows.
 
 The fragment index is a single byte blob; its layout (header + range
-bitmap + range table + CSR explicit list) is documented in §7.3.
+bitmap + range table + CSR explicit list) is documented in [§7.3](07-core-arrays.md#73-vertex-fragments).
 
 A *fragment* is the unit of:
 
@@ -128,7 +128,7 @@ numbering with any other chunk.
 
 Fragments may be referenced by more than one object.  When this is in
 use, the store advertises the `shared_fragments` capability token (see
-§8.2); the rename from the pre-0.6 `shared_vertex_groups` token reflects
+[§8.2](08-metadata.md#82-root-level-metadata)); the rename from the pre-0.6 `shared_vertex_groups` token reflects
 the move from contiguous vertex groups to row-level fragment sharing.
 
 An empty manifest serializes as `B = 0` and represents an object that
@@ -175,7 +175,7 @@ endpoints.
   in the same fragment-index format as `vertex_fragments/`).  Records
   that cross a chunk boundary at the same level live at
   `cross_chunk_links/0/data`.
-- `delta ≠ 0` — cross-pyramid-level edges (optional, see §9.6).  The
+- `delta ≠ 0` — cross-pyramid-level edges (optional, see [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).  The
   intra-chunk records live at `links/<delta>/<i.j.k>` (inline
   self-describing header, no `link_fragments/` companion).  Records
   whose endpoints land in different chunks at the differing level
@@ -193,7 +193,7 @@ When the geometry is purely sequential (streamlines, polylines), the
 `links_convention` field on the root metadata lets writers skip
 materializing `links/` entirely.  The `implicit_sequential` and
 `implicit_sequential_with_branches` conventions are documented in
-§7.5 and §12.3-12.4.
+[§7.5](07-core-arrays.md#75-vertex-links) and [§12.3](12-geometry-types.md#123-skeletons)–[§12.4](12-geometry-types.md#124-streamlines--polylines).
 
 Per-link attributes are optional companion arrays:
 

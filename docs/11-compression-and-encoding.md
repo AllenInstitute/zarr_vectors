@@ -64,8 +64,8 @@ offsets; BYTE-SHUFFLE decorrelates the heterogeneous payload well.
 
 ### Fragment-index is NOT a Zarr codec
 
-The fragment-index byte layout (§7.3) and the manifest-block stream
-(§7.6) are **project-internal record framings** — they live inside
+The fragment-index byte layout ([§7.3](07-core-arrays.md#73-vertex-fragments)) and the manifest-block stream
+([§7.6](07-core-arrays.md#76-object-index)) are **project-internal record framings** — they live inside
 the raw bytes that the Zarr codec pipeline sees as opaque uint8
 input.  The Zarr codec registry has only the standard codecs
 (`blosc`, `zstd`, `gzip`, `shuffle`, `bytes`, …); ZV does not
@@ -79,7 +79,7 @@ without coupling either layer to the other.
 
 Per-array `.zattrs` (under each array group's `zarr.json`) carries:
 
-- `"zv_array"` — discriminator (see §8.4).
+- `"zv_array"` — discriminator (see [§8.4](08-metadata.md#84-array-level-metadata)).
 - `"dtype"` — canonical numpy dtype string (`"float32"`, `"int64"`,
   …).  Duplicated outside the codec pipeline so a reader can learn
   the dtype without materializing the pipeline.

@@ -28,7 +28,7 @@ The default.  Each surviving object's vertices are aggregated into
    the writer).  Per-vertex attributes follow the same reduction.
 3. The coarse-level fragment for that object then carries the
    metavertex rows; the fragment's parent edges live in
-   `links/+1/<chunk>` (when emitted — see §9.6).
+   `links/+1/<chunk>` (when emitted — see [§9.6](#96-multiscale-link-arrays--optional)).
 
 Per-object coarsening preserves object identity across levels: an
 object dropped at a coarser level retains its OID slot, and its

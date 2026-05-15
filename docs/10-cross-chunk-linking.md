@@ -48,7 +48,7 @@ declares which case applies.
   record in `cross_chunk_links/0/data`.
 - **Setting**: `cross_chunk_strategy = "explicit_links"` (the
   default).
-- **Record format**: see §7.7.  Each record carries `link_width`
+- **Record format**: see [§7.7](07-core-arrays.md#77-cross-chunk-links).  Each record carries `link_width`
   endpoints, each endpoint a `(chunk_coords, local_vertex_index)`
   pair.  `link_width = 2` is the generic edge; `link_width = 3` is
   a triangle face; `link_width = 1` is a single child reference
@@ -106,7 +106,7 @@ A writer that emits cross-chunk records is responsible for:
   as the link array — a desynchronized write fails loudly at read
   time.
 
-Level-3 consistency validation (§13.1) checks these invariants
+Level-3 consistency validation ([§13.1](13-conformance-and-validation.md#131-conformance-levels)) checks these invariants
 across `cross_chunk_links/<delta>/data` for every delta present.
 
 ## 10.7 Cross-Pyramid-Level Cross-Chunk Links — Optional
@@ -114,7 +114,7 @@ across `cross_chunk_links/<delta>/data` for every delta present.
 Cross-pyramid-level cross-chunk links (`cross_chunk_links/<delta>/data`
 with `delta ≠ 0`) are an **optional feature**, not a baseline schema
 requirement.  Whether a store emits them is a writer-side choice
-driven by what readers of the store need to do — see §9.6 for the
+driven by what readers of the store need to do — see [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional) for the
 overall framing of multiscale link arrays.
 
 These records exist only when the writer chose
@@ -133,10 +133,10 @@ simplification.
 
 ### Record format
 
-Same as §7.7: `link_width` endpoints, each endpoint a
+Same as [§7.7](07-core-arrays.md#77-cross-chunk-links): `link_width` endpoints, each endpoint a
 `(int64 chunk_coords[sid_ndim], int64 local_vertex_index)`.
 
-**Endpoint level convention** (also in §7.7): endpoint 0 lives at the
+**Endpoint level convention** (also in [§7.7](07-core-arrays.md#77-cross-chunk-links)): endpoint 0 lives at the
 *owning* resolution level L (the level under whose group the array
 resides); endpoints `k > 0` live at level `L + delta`.  When
 `delta > 0`, the owning level is the finer side and the records map

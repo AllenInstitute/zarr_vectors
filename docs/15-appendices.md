@@ -71,8 +71,8 @@ field flags this.  Draco output is already compressed, so the Zarr
 codec pipeline is left empty (or wrapped in a minimal pass-through
 codec).
 
-The fragment-index byte layout (§7.3) and manifest-block stream
-(§7.6) are **not** Zarr codecs — they are project-internal record
+The fragment-index byte layout ([§7.3](07-core-arrays.md#73-vertex-fragments)) and manifest-block stream
+([§7.6](07-core-arrays.md#76-object-index)) are **not** Zarr codecs — they are project-internal record
 framings carried as the raw bytes inside single-chunk `uint8`
 arrays.
 
@@ -181,7 +181,7 @@ stores from source between major versions.
 
 - **0.6.0** — fragment-index schema.  `vertex_group_offsets` was
   replaced by `vertex_fragments` (a v1 byte layout with header,
-  range bitmap, range table, and CSR explicit list — see §7.3).
+  range bitmap, range table, and CSR explicit list — see [§7.3](07-core-arrays.md#73-vertex-fragments)).
   Inline self-describing link blobs at `delta = 0` were split into
   `links/0/<chunk>` (flat payload) + `link_fragments/<chunk>`
   (fragment index).  `object_index/data` adopted the manifest-block
@@ -280,7 +280,7 @@ map onto zarr-vectors **groups**:
 - The precomputed `relationships[<rel_name>]` becomes a per-relationship
   `groups/data` array (or, if multiple relationships, one `groups`-like
   structure per relationship name — typically expressed today by
-  rechunking by relationship; see §8).
+  rechunking by relationship; see [§8](08-metadata.md)).
 - Each group corresponds to one segment id.  Its membership list is
   the annotation IDs (= object IDs in zarr-vectors).
 - The inverse — annotation → list of segments — is then the
@@ -313,7 +313,7 @@ Equivalents:
 | Cell size at level L               | `spatial[L].chunk_size`           | `RootMetadata.chunk_shape` × per-level `chunk_scale_factor` (v0.7) |
 | LOD selection knob                 | `spatial[L].limit`                | `reduction_factor` + per-level `object_sparsity`   |
 | Cross-level identity               | annotation ID is shared across levels | OID-preserving pyramid (`preserves_object_ids = true`) |
-| Drillable parent→child mapping     | implicit (random subsample)       | optional `links/<delta>/<chunk>` arrays (§9.6)     |
+| Drillable parent→child mapping     | implicit (random subsample)       | optional `links/<delta>/<chunk>` arrays ([§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional))     |
 
 Precomputed's "drill the visible cells until you've returned at most
 `limit` annotations per cell" maps to zarr-vectors' "ask each level
@@ -327,7 +327,7 @@ coarsener.
 
 - **Single annotation type → single zarr-vectors store** is a
   straightforward 1:1 transcode.  Pick the geometry mapping from
-  §L.2; emit one fragment per annotation; populate `object_index/`
+  [§L.2](#l2-mapping-the-four-geometry-primitives); emit one fragment per annotation; populate `object_index/`
   in dense OID order from the original `by_id` listing.
 - **Properties** transcode field-for-field; preserve the original
   uint8 / int8 / ... types rather than upcasting.
@@ -358,7 +358,7 @@ coarsener.
 - **Per-link attributes**: edges / faces carry their own attribute
   arrays (`link_attributes/<name>/<delta>/<chunk>`), not just the
   per-annotation properties precomputed supports.
-- **Cross-pyramid-level links** (§9.6) make the pyramid drillable
+- **Cross-pyramid-level links** ([§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)) make the pyramid drillable
   — given a coarse metavertex, walk back to the fine-level vertices
   that produced it.  Precomputed's random-subsample model loses this
   mapping at construction time.
