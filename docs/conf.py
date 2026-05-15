@@ -52,6 +52,7 @@ html_static_path = ["_static"]
 html_theme = "furo"
 html_title = "Zarr Vectors Spec"
 html_css_files = ["custom.css"]
+html_js_files = [("https://hypothes.is/embed.js", {"async": "async"})]
 html_logo = "_static/zarr-vectors-logo.png"
 html_favicon = "_static/favicon.png"
 
