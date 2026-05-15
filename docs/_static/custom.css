@@ -1,0 +1,47 @@
+/* zarr-vectors spec site — Furo theme overrides */
+
+:root {
+    --zv-magenta:       #e0195c;
+    --zv-magenta-light: #ff72c0;
+}
+
+/* Sidebar: tighter font for long nav trees */
+.sidebar-tree .reference {
+    font-size: 0.875rem;
+}
+
+/* Note admonitions get the brand accent */
+.admonition.note {
+    border-left-color: var(--zv-magenta);
+}
+
+/* Inline code: subtle background + monospace tuning */
+code.literal {
+    background: var(--color-inline-code-background);
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-size: 0.9em;
+}
+
+/* Tables: zebra rows */
+table.docutils tbody tr:nth-child(even) {
+    background-color: var(--color-table-row-hover);
+}
+
+/* Wide spec tables — allow horizontal scroll on narrow viewports */
+.wy-table-responsive,
+.table-wrapper {
+    overflow-x: auto;
+}
+
+/* Logo: tame its size in the sidebar */
+.sidebar-logo {
+    max-width: 200px;
+    margin: 0.5rem auto;
+}
+
+/* Reduce top padding on h1 (Furo adds too much on chapter pages) */
+article.bd-article h1:first-of-type,
+.content > section > h1:first-of-type {
+    margin-top: 0.5rem;
+}

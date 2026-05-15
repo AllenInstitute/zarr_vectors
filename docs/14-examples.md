@@ -71,7 +71,7 @@ mouse_brain_nuclei.zarr/
 
 **Root metadata** (`zarr.json["zarr_vectors"]`):
 
-```jsonc
+```json5
 {
   "zv_version": "0.7.0",
   "chunk_shape": [200.0, 200.0, 200.0],
@@ -182,7 +182,7 @@ drosophila_central_complex_mesh.zarr/
 
 **Level-1 metadata** (`zarr.json["zarr_vectors_level"]`):
 
-```jsonc
+```json5
 {
   "level": 1,
   "vertex_count": 24310,
@@ -267,7 +267,7 @@ mouse_cortex_skeletons.zarr/
 
 **Root metadata snippet**:
 
-```jsonc
+```json5
 {
   "links_convention": "implicit_sequential_with_branches",
   "object_index_convention": "standard",
@@ -597,7 +597,7 @@ dti_tracts.zarr/
 
 **Root metadata**:
 
-```jsonc
+```json5
 {
   "zv_version": "0.7.0",
   "geometry_types": ["streamline"],

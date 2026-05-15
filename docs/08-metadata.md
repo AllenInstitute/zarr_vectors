@@ -97,13 +97,13 @@ Cross-level invariants (enforced by
 
 Every array group's `zarr.json` carries a small ZV-specific block:
 
-```jsonc
+```json5
 {
   // Zarr v3 standard fields (shape, dtype, chunk_grid, codecs) live alongside.
   "zv_array": "vertices",          // discriminator
   "dtype": "float32",              // duplicated to avoid materializing the
-                                    // codec pipeline just to learn the dtype
-  "shape": [...],                  // optional, when not derivable
+                                   // codec pipeline just to learn the dtype
+  "shape": [],                     // optional, when not derivable
   "encoding": "raw"                // for vertices arrays only
 }
 ```

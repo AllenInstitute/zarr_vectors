@@ -112,11 +112,13 @@ Zarr provides the storage foundation:
 - **Store abstraction**: Zarr's store interface enables cloud-native storage
 - **Metadata**: Zarr v3's `zarr.json` files carry format metadata under namespaced keys (`zarr_vectors`, `zarr_vectors_level`, `zv_array`)
 
-### 1.4.4 Precomputed Mesh Format
+### 1.4.4 Precomputed Mesh and Annotation Formats
 The Neuroglancer precomputed mesh format influenced multi-resolution mesh design:
 - **Multi-resolution meshes**: Similar approach to storing meshes at multiple levels of detail
 - **Spatial chunking**: Concept of dividing meshes into spatial regions
 - **Draco compression**: Use of Draco for mesh compression
+
+The companion [precomputed annotation format](https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/annotations.md) covers points, lines, axis-aligned bounding boxes, and ellipsoids with per-annotation properties and per-segment relationships.  ZV expresses the same primitives via `geometry_types` + per-vertex / per-object attributes + groups; coarsening differs (per-object aggregation vs random-subsample-with-limit).  See Appendix L for the field-by-field mapping.
 
 ### 1.4.5 Traditional Formats (LAS, PLY, OBJ, STL)
 While ZV addresses limitations of traditional formats, it maintains conceptual compatibility:
