@@ -17,6 +17,8 @@ layout live in the zarr-vectors-py package (`write_points`,
 
 ## 14.1 Mouse Brain Nuclei: Point Cloud with Multi-Resolution and Regions
 
+![Colored point cloud illustration](images/point_cloud.png)
+
 **Use case**: Single-cell positions from a cleared mouse brain (cell
 nuclei centroids).  Each nucleus is an object with a volume
 attribute.  Nuclei are grouped by brain region.  Multi-resolution
@@ -105,6 +107,8 @@ mouse_brain_nuclei.zarr/
 ---
 
 ## 14.2 Mesh with Multi-Resolution (v0.7 chunk-scale growth)
+
+![Triangle mesh at two resolution levels](images/mesh.png)
 
 **Use case**: Surface mesh of a Drosophila brain compartment.
 Triangular mesh, Draco-encoded vertices and faces, three resolution
@@ -196,6 +200,8 @@ drosophila_central_complex_mesh.zarr/
 ---
 
 ## 14.3 Skeleton with Cross-Chunk Objects
+
+![Branching skeleton illustration](images/skeleton.png)
 
 **Use case**: Neuronal skeletons in a large volume; each neuron is
 one object that may span many spatial chunks.  Parent links
@@ -311,6 +317,8 @@ retina_vessels_2d.zarr/
 ---
 
 ## 14.5 Time-Series Point Cloud (XYZT)
+
+![Particle tracks over time](images/tracks_xyzt.png)
 
 **Use case**: Tracking spots in 3-D over time; points are `(x, y, z, t)`.
 
@@ -512,6 +520,8 @@ dti_small.trx.zarr/
 ---
 
 ## 14.9 DTI Streamlines: Large Volume with Chunking and Segment Reuse
+
+![DTI streamlines bundled into tracts](images/streamlines.png)
 
 **Use case**: Diffusion tensor imaging tractography streamlines from
 a large brain volume.  Each streamline is an ordered point sequence
