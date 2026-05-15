@@ -92,6 +92,24 @@ mouse_brain_nuclei.zarr/
 
 - **Objects**: one nucleus per object; each nucleus is a single
   fragment (mode-0 manifest block).
+- **What a *fragment* is in this example**: one nucleus inside one
+  chunk.  Inside `vertex_fragments/<chunk>` it's a length-1 range
+  `(start, 1)` whose `start` is the nucleus's row index in
+  `vertices/<chunk>`.  The fragment count per chunk equals the
+  nucleus count for that chunk.  The fragment index is what lets
+  the `object_index/data` manifest reference a nucleus by chunk-local
+  position without writing global vertex IDs anywhere; it's a small
+  cost (header + bitmap + range table, no CSR) and is what a reader
+  uses to translate `(chunk_coords, fragment_index)` from a manifest
+  block back into a row of `vertices/<chunk>`.
+- **Alternative — undifferentiated point cloud**: if the store
+  doesn't need per-nucleus identity (no `object_ids` at write time),
+  the writer takes the per-bin path instead: each chunk's
+  `vertex_fragments/<chunk>` has one fragment per bin (here
+  `200/50 = 4` per axis → 64 fragments per chunk), and a fragment
+  carries every nucleus that falls in that bin.  No `object_index/`
+  in that case; the fragment index is purely a sub-chunk spatial
+  filter.
 - **Object index**: required (multi-chunk).  Each manifest is one
   block: `(chunk_coords, mode=0, fragment_index=k)`.
 - **Vertex attributes**: `volume` (µm³) per nucleus, row-aligned to
