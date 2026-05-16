@@ -17,7 +17,7 @@ layout live in the zarr-vectors-py package (`write_points`,
 
 ## 14.1 Mouse Brain Nuclei: Point Cloud with Multi-Resolution and Regions
 
-![Colored point cloud illustration](images/point_cloud.png)
+![Point cloud of mouse brain cells](images/zarr_vectors_brain_point_cloud.png)
 
 **Use case**: Single-cell positions from a cleared mouse brain (cell
 nuclei centroids).  Each nucleus is an object with a volume
