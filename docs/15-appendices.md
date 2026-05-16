@@ -51,19 +51,19 @@ The schema covers:
 Default per-array codec pipelines (from
 `zarr_vectors.encoding.compression`):
 
-| Array                                 | Compressor              | Shuffle           |
-|---------------------------------------|-------------------------|-------------------|
-| `vertices`                            | Blosc(Zstd, clevel=5)   | BYTE-SHUFFLE      |
-| `vertex_attributes/<name>`            | Blosc(Zstd, clevel=5)   | BYTE-SHUFFLE      |
-| `vertex_fragments`                    | Blosc(Zstd, clevel=5)   | BYTE-SHUFFLE      |
-| `link_fragments`                      | Blosc(Zstd, clevel=5)   | BYTE-SHUFFLE      |
-| `links/<delta>`                       | Blosc(Zstd, clevel=5)   | BITSHUFFLE        |
-| `object_index`                        | Blosc(Zstd, clevel=5)   | BYTE-SHUFFLE      |
-| `object_attributes/<name>`            | Blosc(Zstd, clevel=5)   | BYTE-SHUFFLE      |
-| `groups`                              | Blosc(Zstd, clevel=5)   | BYTE-SHUFFLE      |
-| `group_attributes/<name>`             | Blosc(Zstd, clevel=5)   | BYTE-SHUFFLE      |
-| `cross_chunk_links/<delta>`           | Blosc(Zstd, clevel=5)   | BYTE-SHUFFLE      |
-| `cross_chunk_link_attributes/<name>/<delta>` | Blosc(Zstd, clevel=5) | BYTE-SHUFFLE  |
+| Array                                 | Compressor                                                            | Shuffle           |
+|---------------------------------------|-----------------------------------------------------------------------|-------------------|
+| `vertices`                            | Blosc(Zstd, clevel=5)                                                 | BYTE-SHUFFLE      |
+| `vertex_attributes/<name>`            | Blosc(Zstd, clevel=5)                                                 | BYTE-SHUFFLE      |
+| `vertex_fragments`                    | none — opaque bytes (see [§11.4](11-compression-and-encoding.md#114-compression-strategy)) | —                 |
+| `link_fragments`                      | none — opaque bytes (see [§11.4](11-compression-and-encoding.md#114-compression-strategy)) | —                 |
+| `links/<delta>`                       | Blosc(Zstd, clevel=5)                                                 | BITSHUFFLE        |
+| `object_index`                        | Blosc(Zstd, clevel=5)                                                 | BYTE-SHUFFLE      |
+| `object_attributes/<name>`            | Blosc(Zstd, clevel=5)                                                 | BYTE-SHUFFLE      |
+| `groups`                              | Blosc(Zstd, clevel=5)                                                 | BYTE-SHUFFLE      |
+| `group_attributes/<name>`             | Blosc(Zstd, clevel=5)                                                 | BYTE-SHUFFLE      |
+| `cross_chunk_links/<delta>`           | Blosc(Zstd, clevel=5)                                                 | BYTE-SHUFFLE      |
+| `cross_chunk_link_attributes/<name>/<delta>` | Blosc(Zstd, clevel=5)                                          | BYTE-SHUFFLE      |
 
 Mesh stores may use Draco-encoded vertex+face co-encoding instead of
 the raw Blosc pipeline; the per-array `.zattrs.encoding = "draco"`

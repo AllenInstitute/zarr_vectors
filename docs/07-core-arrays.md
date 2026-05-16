@@ -91,6 +91,162 @@ pre-0.5) was first reduced to a flat `(K,)` int64 of vertex offsets
 (0.5), then replaced entirely by `vertex_fragments` (0.6) so that
 fragment membership and row sharing can both be expressed.
 
+### 7.3.1 Design rationale
+
+The v1 fragment-index format makes three structural choices that are
+not obvious from the byte layout in §7.3 alone: it supports two
+fragment kinds (range and explicit), it discriminates between them
+with a one-bit-per-fragment bitmap rather than a per-fragment tag,
+and it pairs the bitmap with a dense per-kind table layout.  This
+subsection explains why.  On codec choices for the blob itself see
+[§11.4](11-compression-and-encoding.md#114-compression-strategy).
+
+#### The single-owner vs. multi-owner tradeoff
+
+The fragment-index format settles a question that recurs at every
+layer of ZV's ownership hierarchy: **can one element be referenced
+by more than one owner?** The same tension appears between vertices
+or links and fragments (does a single row of `vertices/<chunk>`
+belong to one fragment or many?), between fragments and objects
+(does a fragment belong to one object's manifest or several?), and
+between objects and groups (does an object belong to one group or
+many?).  Each layer of the format makes its own choice; this
+subsection is about the choice at the vertex/link → fragment layer.
+
+Two extremes bound the design space:
+
+- **Single-owner.**  Every row of `vertices/<chunk>` (or
+  `links/0/<chunk>`) belongs to exactly one fragment.  Writers
+  then have the freedom to organise the payload so that all rows
+  of a fragment lie contiguously, and the index has to store only
+  the run `[start, count)` per fragment.  Reads are cheap — one
+  `np.arange`, one row-slice into the chunk's payload array —
+  and index storage is `O(F)` with a small per-fragment constant.
+- **Multi-owner.**  A single row may be referenced by several
+  fragments.  Writers no longer get contiguity for free — a
+  shared row can only sit in one place in the chunk payload, so
+  it cannot also be adjacent to every fragment that claims it.
+  The index has to carry an explicit list of row indices per
+  fragment, storage grows to `O(sum of fragment sizes)`, and
+  every fragment read becomes a gather rather than a slice.
+
+The single-owner model is cheap when sharing is rare.  The
+multi-owner model is necessary when duplicating the shared rows
+would dominate storage.  The canonical case is the **coarsened
+metanode-merged pyramid level**, where a single metavertex is on
+the path of *N* parent objects and duplicating its row *N* times
+costs N× storage plus N× bytes through the network on every bbox
+read that touches the chunk.  But the same tension shows up
+anywhere a writer might want to express row reuse without paying
+for duplication — branchy graphs at level 0 where two edges share
+an interior vertex, polyline endpoints claimed by separate
+objects, custom writers that emit overlapping fragments by design.
+
+The v1 fragment-index format chooses **neither extreme**.  It
+gives writers the multi-owner capability — explicit fragments
+are a first-class kind — while preserving the single-owner read
+cost for fragments that *happen to be* contiguous runs.  The
+bitmap discriminator (see below) is the mechanism that makes this
+possible: the index declares "this fragment is a run" with one
+bit and stores its two parameters in a dense range table, falling
+back to the explicit row list only when the writer actually
+needed sharing.  Crucially, readers classify any fragment as
+"range" or "explicit" in O(1) from the bitmap alone — they do
+not have to scan or decompress the index to find out.
+
+The practical consequences:
+
+- At level 0 with the default writer, every fragment is a range.
+  The format collapses to "one `(start, count)` per non-empty
+  bin", byte-equivalent (modulo the bitmap and header) to the
+  pre-0.6 contiguous-row index.  The multi-owner machinery costs
+  almost nothing when no one uses it.
+- At coarsened metanode-merged levels, shared metavertices appear
+  as explicit fragments while non-shared coarsened fragments stay
+  as ranges.  Sharing is paid for only on the rows that actually
+  need it.
+- The format does not branch at the level or chunk header — only
+  per-fragment, at the bitmap bit.  A single byte layout serves
+  both modes.
+
+The rest of this subsection explains *how* the format achieves
+that hybrid: why two fragment kinds rather than always-explicit
+(below), why a bitmap rather than other discriminators (further
+below), and how the layout reads as a structural compression
+scheme.
+
+#### Why two fragment kinds at all
+
+Storing every fragment as an explicit index list (the most general
+form) is structurally simpler but fails on three counts:
+
+1. **Storage cost.**  A typical level-0 bin holds dozens to hundreds
+   of vertices.  As a range fragment it costs 16 bytes regardless of
+   `count`.  As an explicit list it costs 4 bytes (CSR offset slot)
+   plus `8 × count` bytes — so `count = 50` is 404 bytes vs. 16
+   bytes, a ~25× blowup on the *common case* in service of a feature
+   only coarsened levels need.
+2. **Decode cost.**  Range fragments materialise as
+   `np.arange(start, start + count)` — zero allocation when the
+   caller just wants `vertices[start : start + count]`.  Explicit
+   fragments require a gather load and a CSR offset lookup.  Forcing
+   every fragment through the gather path adds per-fragment overhead
+   that compounds across thousands of fragments in a typical chunk.
+3. **Format predictability.**  The level-0 stable case maps cleanly
+   to neighbouring formats' contiguous-row conventions (Arrow
+   run-end, Parquet RLE, the pre-0.6 `(offset, count)` table).
+   Keeping that representation first-class makes the format legible
+   at a glance and makes level-0 reads byte-identical in their
+   per-chunk hot path to what the pre-0.6 format produced.
+
+Conversely, forcing *every* fragment into a range would forbid the
+shared-metavertex case the 0.6 rewrite was undertaken for.  Hence
+two kinds, paid for only where they're earned.
+
+#### Why the bitmap is the discriminator
+
+Given two kinds, the format needs a way for the reader to ask
+"what kind is fragment `f`?" before deciding which table to consult.
+Four plausible designs, with costs at `F = 256` fragments and
+`E = 4` explicit:
+
+| Design | Classify cost | Bytes for `F = 256`, `E = 4` | Random-access by `f` |
+|--------|--------------|------------------------------|----------------------|
+| Per-fragment tag byte | O(1) | 256 B | O(1) |
+| Sorted list of explicit fragment IDs | O(log E) | 16 B | needs bsearch per query |
+| One-bit-per-fragment bitmap | O(1) | 32 B | O(1) bit test |
+| Detect dynamically from indices | O(`count`) scan | 0 B (but forces all-explicit storage) | scan per fragment |
+
+The bitmap dominates: 1/8th the bytes of per-fragment tags, O(1)
+classify-by-`f` (single byte fetch + shift + mask), and no scan over
+the index list.  The "sorted explicit-ID list" is byte-cheaper when
+`E` is tiny but loses the O(1) classify property — readers wouldn't
+know "is `f = 137` explicit?" without a binary search per lookup.
+
+The bitmap pays its modest fixed cost (`ceil(F/8)` bytes) in exchange
+for *structural* compression: with one bit per fragment, the format
+declares "this run is contiguous" without storing the run elements
+themselves.  The range table then carries only two int64 values for
+that run, regardless of length.
+
+#### Reading the format as a structural compression scheme
+
+The v1 layout is best understood as a small structural compression
+scheme rather than as a data structure.  The bitmap encodes a 1-bit
+"is this row range a constant arithmetic progression?" flag per
+fragment — run-length encoding over *flags* rather than over values.
+The range table stores the two parameters (`start`, `count`) that
+reconstruct the implicit arithmetic progression — a tight
+parametric form.  The CSR explicit table stores the override list
+only for fragments where the parametric form does not apply.  The
+header carries the popcount that lets the decoder build the
+prefix-popcount lookup in one pass.
+
+The reader pays the cost of the explicit override only when the
+writer chose to use it.  The bitmap is what makes "is this a range?"
+a free question — and that, more than any specific byte saving, is
+the property the format exists to provide.
+
 ## 7.4 Groups
 
 - **Name**: `groups`
