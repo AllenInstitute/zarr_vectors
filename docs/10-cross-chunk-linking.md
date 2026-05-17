@@ -44,6 +44,8 @@ declares which case applies.
 
 ## 10.3 Strategy 2: Explicit Cross-Chunk Links
 
+![Toy Example of A 1d graph coarsening](images/multi-scale-coarsening.png)
+
 - **Principle**: each cross-chunk edge or face is written as one
   record in `cross_chunk_links/0/data`.
 - **Setting**: `cross_chunk_strategy = "explicit_links"` (the

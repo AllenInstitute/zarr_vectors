@@ -14,7 +14,12 @@ coarsest level fetches only that level's blobs.  Levels do not
 duplicate root metadata (axes, bounds, CRS, conventions); those are
 all root-only.
 
+
 ## 9.2 Downsampling Strategies
+
+Below is a toy example to help you visualize and conceptualize what a multi-scale coarsening of a graph with edges would look like
+
+![Toy Example of A 1d graph coarsening](images/multi-scale-coarsening.png)
 
 ### Per-object coarsening (`coarsening_method = "per_object"`)
 
