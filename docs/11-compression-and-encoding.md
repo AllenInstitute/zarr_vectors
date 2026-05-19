@@ -30,30 +30,38 @@ Mesh stores may opt into Draco for the vertex+face co-encoding:
 Default codec pipelines (from
 `zarr_vectors.encoding.compression.get_default_compressor`):
 
-| Array                                       | Compressor                                                | Shuffle           |
-|---------------------------------------------|-----------------------------------------------------------|-------------------|
-| `vertices`                                  | Blosc(Zstd, clevel=5)                                     | BYTE-SHUFFLE      |
-| `vertex_attributes/<name>`                  | Blosc(Zstd, clevel=5)                                     | BYTE-SHUFFLE      |
-| `vertex_fragments`                          | none — opaque bytes (see [§11.4](#114-compression-strategy)) | —                 |
-| `link_fragments`                            | none — opaque bytes (see [§11.4](#114-compression-strategy)) | —                 |
-| `links/<delta>`                             | Blosc(Zstd, clevel=5)                                     | BITSHUFFLE        |
-| `object_index`                              | Blosc(Zstd, clevel=5)                                     | BYTE-SHUFFLE      |
-| `object_attributes/<name>`                  | Blosc(Zstd, clevel=5)                                     | BYTE-SHUFFLE      |
-| `groups`                                    | Blosc(Zstd, clevel=5)                                     | BYTE-SHUFFLE      |
-| `group_attributes/<name>`                   | Blosc(Zstd, clevel=5)                                     | BYTE-SHUFFLE      |
-| `cross_chunk_links/<delta>`                 | Blosc(Zstd, clevel=5)                                     | BYTE-SHUFFLE      |
-| `cross_chunk_link_attributes/<name>/<delta>` | Blosc(Zstd, clevel=5)                                    | BYTE-SHUFFLE      |
+| Array                                        | Dtype                                                                | Compressor                                                          | Shuffle      |
+|----------------------------------------------|----------------------------------------------------------------------|---------------------------------------------------------------------|--------------|
+| `vertices`                                   | user-declared (float or integer; see [§7.1](07-core-arrays.md#71-vertex-positions)) | Blosc(Zstd, clevel=5)                                 | BYTE-SHUFFLE |
+| `vertex_attributes/<name>`                   | user-declared                                                         | Blosc(Zstd, clevel=5)                                               | BYTE-SHUFFLE |
+| `vertex_fragments`                           | opaque `uint8` ([§7.3](07-core-arrays.md#73-vertex-fragments))       | none — opaque bytes (see [§11.4](#114-compression-strategy))        | —            |
+| `link_fragments`                             | opaque `uint8` ([§7.5](07-core-arrays.md#75-vertex-links))           | none — opaque bytes (see [§11.4](#114-compression-strategy))        | —            |
+| `links/<delta>`                              | user-declared integer (width chosen to fit `n_vertices_in_chunk`; see [§7.5](07-core-arrays.md#75-vertex-links)) | Blosc(Zstd, clevel=5)                                       | BITSHUFFLE   |
+| `link_attributes/<name>/<delta>`             | user-declared                                                         | Blosc(Zstd, clevel=5)                                               | BYTE-SHUFFLE |
+| `object_index`                               | `object` (vlen-bytes; opaque manifest blob — [§7.6](07-core-arrays.md#76-object-index)) | Blosc(Zstd, clevel=5)                            | BYTE-SHUFFLE |
+| `object_attributes/<name>`                   | user-declared                                                         | Blosc(Zstd, clevel=5)                                               | BYTE-SHUFFLE |
+| `groups`                                     | `int64` (ragged CSR of object IDs + offsets)                          | Blosc(Zstd, clevel=5)                                               | BYTE-SHUFFLE |
+| `group_attributes/<name>`                    | user-declared                                                         | Blosc(Zstd, clevel=5)                                               | BYTE-SHUFFLE |
+| `cross_chunk_links/<delta>`                  | `int64` (endpoint records — see prose below)                          | Blosc(Zstd, clevel=5)                                               | BYTE-SHUFFLE |
+| `cross_chunk_link_attributes/<name>/<delta>` | user-declared                                                         | Blosc(Zstd, clevel=5)                                               | BYTE-SHUFFLE |
 
-`links/<delta>` is the only array whose default uses BITSHUFFLE — the
-correlated int64 endpoint indices compress better after bit-level
-de-correlation.
+**Why BITSHUFFLE for `links/<delta>` but BYTE-SHUFFLE for
+`cross_chunk_links/<delta>`** — the two arrays carry differently shaped
+records.  Intra-chunk `links/<delta>` rows are `link_width × int64`
+**chunk-local** vertex indices (range: `[0, n_vertices_in_chunk)`); the
+high-order bits are zero and the low-order bits are correlated, so
+bit-level de-correlation is the right pre-pass for Zstd.  Cross-chunk
+`cross_chunk_links/<delta>` rows are `link_width × (chunk_coords[sid_ndim],
+local_vertex_index)`; the chunk-coord component is high-entropy across the
+whole volume, so the bit-correlation argument doesn't apply and BYTE-SHUFFLE
+is a better fit.
 
 `vertex_fragments` and `link_fragments` bypass the Zarr codec pipeline
 entirely: their chunks are project-internal record framings (see
-[§7.3](07-core-arrays.md#73-vertex-fragments)) and are written as
-opaque bytes via the `FsGroup.write_bytes` path.  See
-[§11.4](#114-compression-strategy) for why the framing stands on its
-own without an outer compressor.
+[§7.3](07-core-arrays.md#73-vertex-fragments)) and are written as opaque
+bytes via the `FsGroup.write_bytes` path.  See
+[§11.4](#114-compression-strategy) for why the framing stands on its own
+without an outer compressor.
 
 ## 11.4 Compression Strategy
 

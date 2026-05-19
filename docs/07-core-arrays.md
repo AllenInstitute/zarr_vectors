@@ -1,7 +1,20 @@
 # 7. Core Arrays
 
 This section is the array-by-array reference.  Each array is a Zarr v3
-group whose chunks are single-chunk-per-coord 1-D `uint8` byte blobs.
+array whose dtype, chunk shape, and codec pipeline depend on its role:
+
+- **Geometry and attribute arrays** (`vertices`, `links`,
+  `vertex_attributes`, `object_attributes`, ...) use standard numeric
+  dtypes — `float16` / `float32` / `float64` / `int64` — declared in
+  `.zattrs.dtype` and flow through the standard Zarr v3 codec
+  pipeline.  A vanilla zarr reader sees them as ordinary numeric arrays.
+- **Index and framing arrays** (`vertex_fragments`, `link_fragments`,
+  per-object manifest blobs in `object_index/`) carry
+  **project-internal binary record framings** inside `uint8` or
+  vlen-bytes chunks.  They bypass the Zarr codec pipeline (see
+  [§11.4](11-compression-and-encoding.md#114-compression-strategy)) and
+  require a zarr-vectors-aware decoder to interpret.
+
 A per-array `zarr.json` carries a `"zv_array"` discriminator plus a
 small shape/dtype block; per-array `.zattrs` does **not** duplicate
 fields the byte payload already carries (e.g. `vertex_fragments` does
@@ -16,9 +29,21 @@ not store `num_fragments` outside the blob).
 - **Name**: `vertices`
 - **Path**: `<level>/vertices/<i.j.k>` (one chunk key per occupied
   spatial chunk).
-- **Payload**: raw little-endian floats (`float16` / `float32` /
-  `float64`, dtype declared in `.zattrs`).  Row k is one
-  `sid_ndim`-tuple position; the chunk holds `N_k` rows back-to-back.
+- **Payload**: raw little-endian values whose dtype is declared in
+  `.zattrs.dtype`.  Any numeric dtype that can carry spatial
+  coordinates is allowed: **floats** (`float16` / `float32` /
+  `float64`) for continuous physical units, or **integers** (signed
+  or unsigned, any width — `uint8`, `int16`, `uint32`, `int64`, ...)
+  for voxel-indexed positions, Draco-quantized stores, or
+  fixed-precision data where storage matters more than continuous
+  resolution.  Row k is one `sid_ndim`-tuple position; the chunk
+  holds `N_k` rows back-to-back.
+
+  The only formal requirement is that the dtype be comparable to the
+  values in root `bounds` — i.e. orderable and broadcastable — so
+  bounding-box queries work.  Float bounds with integer vertex
+  positions (or vice-versa) are fine; the reader coerces at compare
+  time.
 - **Encoding**: `raw` (default) or `draco` (mesh-only; positions and
   faces are co-encoded inside a single Draco point-cloud or mesh
   blob).
@@ -281,8 +306,15 @@ parent id, …); the format does not impose a tree.
 ### delta = 0 (intra-level)
 
 - **Payload**: a flat concatenated payload of link rows, each row
-  `link_width` × `int64` vertex-row indices.  Vertex indices are
-  chunk-local (they reference rows of `vertices/<i.j.k>`).
+  `link_width` × integer vertex-row indices.  Vertex indices are
+  **chunk-local** — they reference rows of `vertices/<i.j.k>`.
+  Because the index space is bounded by `n_vertices_in_chunk`, the
+  writer SHOULD pick the narrowest unsigned (or signed) integer dtype
+  that covers the expected per-chunk vertex count: `uint8` for
+  chunks with ≤ 256 vertices, `uint16` for ≤ 64 K, `uint32` for ≤ 4 G,
+  `int64` as the universally-safe fallback.  Narrower dtypes are a
+  4–8× storage savings on typical data and the reader honours
+  whatever is declared in `.zattrs.dtype`.
 - **Companion**: `link_fragments/<i.j.k>` — fragment index in the
   same v1 byte layout as [§7.3](#73-vertex-fragments) — carries the per-fragment partition of
   link rows.  Each link fragment is the set of link rows belonging to
@@ -290,7 +322,7 @@ parent id, …); the format does not impose a tree.
   `links/0/<i.j.k>` row-for-row in parallel with how
   `vertex_fragments/<i.j.k>` partitions `vertices/<i.j.k>`).
 - **`.zattrs`**: `{"zv_array": "links", "level_delta": 0,
-  "link_width": L, "num_links": M, "dtype": "int64"}`.
+  "link_width": L, "num_links": M, "dtype": "<integer dtype>"}`.
 - **`link_width`**:
   - `1` — single parent reference (skeleton parents, pyramid
     metanode drill-down).
