@@ -37,6 +37,10 @@ A ZV store is a **Zarr v3 group** at its root.  Its on-disk layout
 │   │   └── <name>/
 │   │       ├── zarr.json
 │   │       └── <i.j.k>                # row-aligned to vertices/<i.j.k>
+│   ├── fragment_attributes/
+│   │   └── <name>/
+│   │       ├── zarr.json
+│   │       └── <i.j.k>                # row-aligned to vertex_fragments/<i.j.k>
 │   ├── link_attributes/
 │   │   └── <name>/
 │   │       └── 0/
@@ -128,6 +132,7 @@ implementation (`zarr_vectors.constants`):
 | `link_fragments`                | per-chunk fragment index over `links/0/<chunk>` (delta=0 only) |
 | `links`                         | per-(delta, chunk) link byte blobs                           |
 | `vertex_attributes`             | per-(name, chunk) attribute blobs, row-aligned to vertices   |
+| `fragment_attributes`           | per-(name, chunk) attribute blobs, row-aligned to vertex_fragments |
 | `link_attributes`               | per-(name, delta, chunk) attribute blobs                     |
 | `object_index`                  | flat manifest-block stream ([§7.6](07-core-arrays.md#76-object-index))                            |
 | `object_attributes`             | per-(name) dense object-row arrays                           |
