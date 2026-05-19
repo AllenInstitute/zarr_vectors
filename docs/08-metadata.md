@@ -120,6 +120,7 @@ Recognized `zv_array` discriminator values (one per array kind):
 | `"link_attribute"`                 | `<level>/link_attributes/<name>/<delta>/`                            |
 | `"object_index"`                   | `<level>/object_index/`                                              |
 | `"object_attribute"`               | `<level>/object_attributes/<name>/`                                  |
+| `"fragment_attribute"`             | `<level>/fragment_attributes/<name>/`                                |
 | `"groups"`                         | `<level>/groups/`                                                    |
 | `"groupings_attribute"`            | `<level>/group_attributes/<name>/`                                   |
 | `"cross_chunk_links"`              | `<level>/cross_chunk_links/<delta>/`                                 |

@@ -18,6 +18,7 @@ Zarr Store Root
 │   ├── links/0/<i.j.k>                # intra-level link rows (delta=0)
 │   ├── link_fragments/<i.j.k>         # fragment index over links/0/<i.j.k>
 │   ├── vertex_attributes/<name>/<i.j.k>
+│   ├── fragment_attributes/<name>/<i.j.k>          # optional, parallels vertex_fragments
 │   ├── link_attributes/<name>/0/<i.j.k>            # optional, parallels links
 │   ├── object_index/data              # manifest-block stream (B objects)
 │   ├── object_attributes/<name>/data
@@ -43,9 +44,10 @@ Each level carries:
 - **Required** at level 0: at least `vertices/`.  Other arrays are
   optional per geometry type (see [§12](12-geometry-types.md)) and per writer choice.
 - **Optional, schema-defined**: `vertex_fragments/`, `link_fragments/`,
-  `links/`, `vertex_attributes/`, `link_attributes/`, `object_index/`,
-  `object_attributes/`, `groups/`, `group_attributes/`,
-  `cross_chunk_links/`, `cross_chunk_link_attributes/`.
+  `links/`, `vertex_attributes/`, `fragment_attributes/`,
+  `link_attributes/`, `object_index/`, `object_attributes/`, `groups/`,
+  `group_attributes/`, `cross_chunk_links/`,
+  `cross_chunk_link_attributes/`.
 - **Per-level overrides**: each level may set its own `bin_shape`
   (coarser bins for pyramid levels), `chunk_shape` (v0.7 — coarser
   levels may use larger chunks), and a `parent_level` pointer.

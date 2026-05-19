@@ -4,7 +4,7 @@ This section is the array-by-array reference.  Each array is a Zarr v3
 array whose dtype, chunk shape, and codec pipeline depend on its role:
 
 - **Geometry and attribute arrays** (`vertices`, `links`,
-  `vertex_attributes`, `object_attributes`, ...) use standard numeric
+  `vertex_attributes`, `fragment_attributes`, `object_attributes`, ...) use standard numeric
   dtypes — `float16` / `float32` / `float64` / `int64` — declared in
   `.zattrs.dtype` and flow through the standard Zarr v3 codec
   pipeline.  A vanilla zarr reader sees them as ordinary numeric arrays.
@@ -457,3 +457,22 @@ the explicit standard convention (`object_index_convention =
   the same OID space as `object_index/`.
 - **`.zattrs`**: standard attribute schema (`name`, `dtype`, `shape`,
   optional `channel_names`).
+
+## 7.11 Fragment Attributes
+
+- **Name**: `fragment_attributes`
+- **Path**: `<level>/fragment_attributes/<name>/<i.j.k>`.
+- **Payload**: raw little-endian rows, row-aligned to fragments in
+  `vertex_fragments/<i.j.k>`.  Shape per chunk is `(F_k,)` for a
+  scalar attribute or `(F_k, C)` for a multi-channel attribute (`C`
+  declared in `.zattrs`), where `F_k` is the chunk's `num_fragments`
+  carried in the [§7.3](#73-vertex-fragments) fragment-index header.
+- **`.zattrs`**: `{"zv_array": "fragment_attribute", "name": "<name>",
+  "dtype": "<dtype>", "shape": [...]}`.  The optional `channel_names`
+  / `channel_dtype` fields describe per-channel labels for multi-channel
+  attributes.
+- **Optional**: emitted only when the writer chose to carry per-fragment
+  attributes; absent by default.
+- **Selective access**: a reader fetches only the
+  `fragment_attributes/<name>/<i.j.k>` chunks it needs; chunk listings
+  are O(non-empty-chunks).
