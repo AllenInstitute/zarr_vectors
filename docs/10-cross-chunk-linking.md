@@ -303,7 +303,7 @@ bytes:   36 per record
 
 Stored on the `cross_chunk_links/<delta>/` group itself:
 
-```jsonc
+```json
 {
   "zv_array":    "cross_chunk_links",
   "sid_ndim":    3,
@@ -321,7 +321,7 @@ key) fails with a clear "run the migration helper" error.
 
 Matching attribute group:
 
-```jsonc
+```javascript
 {
   "zv_array":    "cross_chunk_link_attribute",
   "name":        "weight",
