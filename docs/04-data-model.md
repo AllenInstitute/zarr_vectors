@@ -24,17 +24,18 @@ Zarr Store Root
 │   ├── object_attributes/<name>/data
 │   ├── groups/data                    # G groups → object id lists
 │   ├── group_attributes/<name>/data
-│   ├── cross_chunk_links/0/<c_sorted_0>/.../<c_sorted_{K-1}>/data
-│   │                                   #   K-deep leaves, one per sorted-unique chunk set (v0.8+)
-│   └── cross_chunk_link_attributes/<name>/0/<c_sorted_0>/.../<c_sorted_{K-1}>/data
+│   ├── cross_chunk_links/0/kK         # K-separated sharded vlen-bytes
+│   │                                   #   arrays (v0.8+); K = number of
+│   │                                   #   distinct chunks per record, 1..L
+│   └── cross_chunk_link_attributes/<name>/0/kK
 ├── 1/                                 # coarser level (optional)
 │   ├── zarr.json                      # may override chunk_shape (v0.7)
 │   ├── vertices/<i.j.k> …
 │   ├── links/0/<i.j.k>                # intra-level edges at this level
 │   ├── links/+1/<i.j.k>               # optional: fine→coarse pyramid edges
 │   │                                   #   (only when cross_level_storage != "none")
-│   ├── cross_chunk_links/0/<c_sorted_0>/.../<c_sorted_{K-1}>/data
-│   ├── cross_chunk_links/+1/<c_sorted_0>/.../<c_sorted_{K-1}>/data
+│   ├── cross_chunk_links/0/kK         # same kN layout per level
+│   ├── cross_chunk_links/+1/kK
 │   │                                   #   optional, same gating as above
 │   └── …
 └── N/
@@ -146,7 +147,7 @@ Object reconstruction reads each block's `vertex_fragments/<chunk>`
 entries to discover which rows of `vertices/<chunk>` belong to the
 object, then optionally walks the per-(chunk-pair) leaves under
 `cross_chunk_links/0/` to recover edges crossing the chunk boundary
-(see [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-partitioned-by-sorted-unique-chunks)).
+(see [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)).
 
 ### Identity convention
 
@@ -179,13 +180,13 @@ endpoints.
   `link_fragments/<i.j.k>`, which carries the per-fragment partition
   in the same fragment-index format as `vertex_fragments/`).  Records
   that cross a chunk boundary at the same level live under
-  `cross_chunk_links/0/`, filed into K-deep leaves keyed by the
-  sorted unique chunks each record touches ([§10.6](10-cross-chunk-linking.md#106-on-disk-layout-partitioned-by-sorted-unique-chunks)).
+  `cross_chunk_links/0/`, filed into kN array cells keyed by the
+  sorted unique chunks each record touches ([§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)).
 - `delta ≠ 0` — cross-pyramid-level edges (optional, see [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).  The
   intra-chunk records live at `links/<delta>/<i.j.k>` (inline
   self-describing header, no `link_fragments/` companion).  Records
   whose endpoints land in different chunks at the differing level
-  use the same K-deep partitioned layout under
+  use the same K-separated sharded `kN` layout under
   `cross_chunk_links/<delta>/`.
 
 Each link record holds `link_width` endpoints; `link_width = 2`
@@ -194,11 +195,11 @@ encodes a generic edge, `link_width = 3` encodes a mesh face,
 drill-down).  The `link_width` is carried on the
 `cross_chunk_links/<delta>/` group `.zattrs`.
 
-Endpoint convention for `cross_chunk_links/<delta>/…/data`: endpoint
+Endpoint convention for `cross_chunk_links/<delta>/kK`: endpoint
 0 lives at the *owning* level L; endpoints `k > 0` live at `L + delta`.
-Endpoint i's chunk is recovered from the leaf path's K sorted segments
-via the record's `chunk_index` for that endpoint; the local vertex
-index is stored alongside.
+Endpoint i's chunk is recovered from the cell coord's K sorted chunk
+segments via the record's `chunk_index` for that endpoint; the local
+vertex index is stored alongside.
 
 When the geometry is purely sequential (streamlines, polylines), the
 `links_convention` field on the root metadata lets writers skip
@@ -210,10 +211,10 @@ Per-link attributes are optional companion arrays:
 
 - `link_attributes/<name>/<delta>/<i.j.k>` — one row per intra-chunk
   link in the parallel `links/<delta>/<i.j.k>` payload.
-- `cross_chunk_link_attributes/<name>/<delta>/<c_sorted_0>/.../<c_sorted_{K-1}>/data`
-  — one attribute leaf per matching cross-chunk-link leaf at the
-  same `(delta, sorted-chunks-path)`, with one row per cross-chunk
-  record in record order.
+- `cross_chunk_link_attributes/<name>/<delta>/kK` — parallel
+  K-separated sharded vlen-bytes arrays mirroring the link `kN`
+  arrays at the same `(delta, K, cell coord)`, with one row per
+  cross-chunk record in record order.
 
 The `link_fragments/` companion exists only at `delta = 0`; for
 non-zero deltas, the inline header already partitions the records.

@@ -81,9 +81,11 @@ connectivity is then expressed by one of two strategies:
   vertex per shared boundary point.
 - **Explicit cross-chunk links** (`cross_chunk_strategy =
   "explicit_links"`, the default): each cross-chunk edge or face is
-  written as a record in `cross_chunk_links/0/<chunk_sorted_0>/.../<chunk_sorted_{K-1}>/data` with
-  `(chunk_A, vi_A)` / `(chunk_B, vi_B)` endpoints.  No vertex
-  duplication.
+  written as a record in the `cross_chunk_links/0/kK` sharded
+  vlen-bytes array (K = number of distinct chunks the record
+  touches), with `(chunk_A, vi_A)` / `(chunk_B, vi_B)` endpoints
+  recovered from the cell coord plus per-endpoint `chunk_index`.  No
+  vertex duplication.
 
 A store may also set `cross_chunk_strategy = "both"` and emit both
 representations.

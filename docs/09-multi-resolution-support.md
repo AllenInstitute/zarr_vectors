@@ -127,16 +127,17 @@ The format keeps these invariants:
 - `object_id` space is preserved by per-object pyramids; dropped
   objects retain empty manifest rows.
 - Cross-level edges, when emitted, live in `links/<delta>/<chunk>`
-  (intra-chunk) and `cross_chunk_links/<delta>/<chunk_sorted_0>/.../<chunk_sorted_{K-1}>/data`
-  (cross-chunk, partitioned by sorted unique chunks — [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-partitioned-by-sorted-unique-chunks)),
+  (intra-chunk) and `cross_chunk_links/<delta>/kK` (cross-chunk;
+  K-separated sharded vlen-bytes arrays keyed by sorted unique chunks
+  — [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)),
   with endpoint 0 at the owning level and endpoint k > 0 at level
   `owning + delta`.
 
 ## 9.6 Multiscale Link Arrays — Optional
 
-Cross-pyramid-level links — `links/<delta>/<chunk>` and the K-deep
-partitioned cross-chunk-link leaves at
-`cross_chunk_links/<delta>/<chunk_sorted_0>/.../<chunk_sorted_{K-1}>/data`
+Cross-pyramid-level links — `links/<delta>/<chunk>` and the
+K-separated sharded cross-chunk-link arrays at
+`cross_chunk_links/<delta>/kK`
 for `delta ≠ 0` — are an **optional
 feature**, not a baseline schema requirement.  Whether a store
 includes them is a writer-side choice driven by the consumer use
@@ -168,9 +169,9 @@ segment between the array name and the chunk key:
 
 ```text
 links/<delta>/<chunk>
-cross_chunk_links/<delta>/<chunk_sorted_0>/.../<chunk_sorted_{K-1}>/data
+cross_chunk_links/<delta>/kK            # K in {1, …, link_width}
 link_attributes/<name>/<delta>/<chunk>
-cross_chunk_link_attributes/<name>/<delta>/<chunk_sorted_0>/.../<chunk_sorted_{K-1}>/data
+cross_chunk_link_attributes/<name>/<delta>/kK
 ```
 
 `<delta> = 0` is mandatory whenever the geometry has explicit links

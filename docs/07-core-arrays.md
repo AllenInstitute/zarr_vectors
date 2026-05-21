@@ -405,25 +405,30 @@ the explicit standard convention (`object_index_convention =
 ## 7.7 Cross-Chunk Links
 
 - **Name**: `cross_chunk_links`
-- **Path** (v0.8+): records are filed into a **K-deep leaf** keyed by
-  the sorted unique chunks they touch:
-  `<level>/cross_chunk_links/<delta>/<chunk_sorted_0>/<chunk_sorted_1>/.../<chunk_sorted_{K-1}>/data`
-  where `K` is the number of distinct chunks the records in this leaf
-  involve (`1 ≤ K ≤ link_width`).  Each `<chunk_sorted_i>` is the
-  dot-separated chunk-coord string used by `vertices/<chunk_key>`,
-  emitted in lex order.  See [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-partitioned-by-sorted-unique-chunks)
+- **Path** (v0.8+): records are filed into **K-separated sharded
+  vlen-bytes zarr arrays** under
+  `<level>/cross_chunk_links/<delta>/kK`, one `kK` per distinct K
+  (`1 ≤ K ≤ link_width`).  Each `kK` array has shape `(Cx,…)*K`,
+  inner chunks of `(1,)*(sid_ndim*K)`, and outer shards of
+  `(4,)*(sid_ndim*K)` by default.  A record whose sorted-unique
+  chunks are `(c_0, …, c_{K-1})` (lex order) lives at cell coord
+  `(c_0 - origin) ⧺ … ⧺ (c_{K-1} - origin)` where `origin` is
+  `kK.attrs.chunk_origin`.  See
+  [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)
   for the full layout description.
 - **Per-record payload**: each record is `link_width` chunk-indices
   (uint8, one per endpoint) followed by `link_width` local vertex
   indices (int64, one per endpoint) — total `9 * link_width` bytes
   per record.  The chunk-index `ci_i` selects one of the K sorted
-  segments in the leaf path; that's the chunk endpoint `i` lives in.
+  chunks in the cell coord; that's the chunk endpoint `i` lives in.
   No chunk coords are repeated inside the payload.
-- **Group-level `.zattrs`**: `{"zv_array": "cross_chunk_links",
+- **Parent-group `.zattrs`**: `{"zv_array": "cross_chunk_links",
   "level_delta": <delta>, "link_width": L, "sid_ndim": ndim, "layout":
-  "partitioned_v1"}`.  `num_links` is no longer at the group level —
-  per-leaf counts are derived from leaf byte length as
-  `len(bytes) / (9 * link_width)`.
+  "sharded_v1"}`.  Each `kK` array additionally carries
+  `{"zv_array": "cross_chunk_links_kN", "K": K, "chunk_origin":
+  [o_0, …]}` and standard zarr `shape` / `chunk_shape` / codecs.
+  `num_links` is no longer stored anywhere — per-cell counts are
+  derived from cell byte length as `len(bytes) / (9 * link_width)`.
 - **Endpoint level convention**: endpoint 0 (`ci_0`, `vi_0`) lives at
   the *owning* resolution level L; endpoints `k > 0` live at `L +
   delta`.  For `delta = 0` both endpoints are at the same level; for
@@ -460,20 +465,21 @@ the explicit standard convention (`object_index_convention =
 
 - **Name**: `cross_chunk_link_attributes`
 - **Path** (v0.8+): partitioned in lockstep with `cross_chunk_links/`:
-  `<level>/cross_chunk_link_attributes/<name>/<delta>/<chunk_sorted_0>/.../<chunk_sorted_{K-1}>/data`.
-  One attribute leaf per matching cross-chunk-link leaf at the same
-  `(delta, sorted-chunks-path)`.
-- **Per-leaf payload**: one row per cross-chunk record in the
-  matching link leaf, in record order.  Shape `(num_records_in_leaf,)`
-  or `(num_records_in_leaf, C)` for multi-channel attributes.
-- **Group-level `.zattrs`**: `{"zv_array": "cross_chunk_link_attribute",
+  `<level>/cross_chunk_link_attributes/<name>/<delta>/kK`.  One
+  attribute kN array per matching link kN array, with matching cell
+  coords.
+- **Per-cell payload**: one row per cross-chunk record in the
+  matching link cell, in record order.  Shape `(num_records_in_cell,)`
+  or `(num_records_in_cell, C)` for multi-channel attributes; packed
+  as vlen-bytes per cell.
+- **Parent-group `.zattrs`**: `{"zv_array": "cross_chunk_link_attribute",
   "name": "<name>", "dtype": "<dtype>", "level_delta": <delta>,
-  "shape": null or [C], "layout": "partitioned_v1"}`.  `num_links` is
-  no longer stored at the group level.
-- **Per-leaf parity invariant**: for every attribute leaf, its record
-  count equals the parallel `cross_chunk_links/<delta>/<same path>/data`
-  leaf's record count.  A desynchronized write fails loudly at read
-  time.
+  "shape": null or [C], "layout": "sharded_v1"}`.  `num_links` is
+  no longer stored anywhere.
+- **Per-cell parity invariant**: for every populated attribute cell,
+  its record count equals the parallel
+  `cross_chunk_links/<delta>/kK` cell's record count at the same
+  cell coord.  A desynchronized write fails loudly at read time.
 
 ## 7.10 Object Attributes
 

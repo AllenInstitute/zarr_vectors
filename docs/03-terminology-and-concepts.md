@@ -78,17 +78,17 @@
   blocks (`object_index/data`).  Optional when `object_index_convention
   = "identity"` and the store has exactly one spatial chunk;
   required otherwise.
-- **Cross-Chunk Link**: A record under
-  `cross_chunk_links/<delta>/<chunk_sorted_0>/.../<chunk_sorted_{K-1}>/data`
+- **Cross-Chunk Link**: A record in a `cross_chunk_links/<delta>/kK`
+  sharded vlen-bytes array (one per distinct K, `1 ≤ K ≤ link_width`)
   whose endpoints live in different chunks (and, when `delta ≠ 0`,
   at different pyramid levels).  Each record is `L = link_width`
   `(chunk_index, vertex_index)` pairs; the chunk identity of each
-  endpoint is recovered from the leaf path's K sorted segments via
-  the per-endpoint `chunk_index`.  See [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-partitioned-by-sorted-unique-chunks).
+  endpoint is recovered from the cell coord's K sorted chunk segments
+  via the per-endpoint `chunk_index`.  See [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays).
 - **Resolution Level**: A level in the multi-resolution pyramid,
   named by bare integer (`0/`, `1/`, …, `N/`).
 - **Pyramid-Level Delta**: The `<delta>` segment in
-  `links/<delta>/<chunk>` / `cross_chunk_links/<delta>/<…>/data` paths.
+  `links/<delta>/<chunk>` / `cross_chunk_links/<delta>/kK` paths.
   `delta = 0` is intra-level; `delta ≠ 0` is cross-pyramid-level
   (optional — see [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).
 
@@ -123,6 +123,6 @@ Optional features advertised in `format_capabilities` (see [§8.2](08-metadata.m
 - **`multiscale_links`** — store uses the `<delta>` sub-folder layout
   and may contain cross-pyramid-level edges.
 - **`partitioned_cross_chunk_links`** — store uses the v0.8
-  partitioned cross-chunk-link layout (K-deep leaves keyed by sorted
+  sharded cross-chunk-link layout (kN array cells keyed by sorted
   unique chunks).  Coupled with `multiscale_links`: any store with a
   `cross_chunk_links/<delta>/` group MUST carry both tokens.

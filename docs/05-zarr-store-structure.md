@@ -60,13 +60,17 @@ A ZV store is a **Zarr v3 group** at its root.  Its on-disk layout
 │   │       └── data
 │   ├── cross_chunk_links/
 │   │   └── 0/
-│   │       ├── zarr.json              # sid_ndim, level_delta=0, link_width, layout="partitioned_v1"
-│   │       └── <c_sorted_0>/.../<c_sorted_{K-1}>/data
-│   │                                  # K-deep leaves, one per sorted-unique-chunk set (v0.8+)
+│   │       ├── zarr.json              # sid_ndim, level_delta=0, link_width, layout="sharded_v1"
+│   │       ├── k1/                    # K-separated sharded vlen-bytes arrays
+│   │       ├── k2/                    # (v0.8+); one kK per distinct K that
+│   │       └── k3/                    # has records; 1 ≤ K ≤ link_width
 │   └── cross_chunk_link_attributes/
 │       └── <name>/
 │           └── 0/
-│               └── <c_sorted_0>/.../<c_sorted_{K-1}>/data
+│               ├── zarr.json          # dtype, name, level_delta, layout="sharded_v1"
+│               ├── k1/                # parallel kN attribute arrays
+│               ├── k2/                # mirroring the link kN arrays
+│               └── k3/
 ├── 1/                                 # optional coarser level
 │   ├── zarr.json                      # may override "chunk_shape" (v0.7)
 │   ├── vertices/ …
@@ -74,9 +78,12 @@ A ZV store is a **Zarr v3 group** at its root.  Its on-disk layout
 │   │   ├── 0/                         # intra-level edges at this level
 │   │   └── +1/                        # optional fine→coarse links
 │   ├── cross_chunk_links/
-│   │   ├── 0/<c_sorted_0>/.../<c_sorted_{K-1}>/data
-│   │   └── +1/<c_sorted_0>/.../<c_sorted_{K-1}>/data
-│   │                                  # optional fine→coarse
+│   │   ├── 0/                         # same kN-array layout per level
+│   │   │   ├── k1/, k2/, …
+│   │   │   └── zarr.json
+│   │   └── +1/                        # optional fine→coarse
+│   │       ├── k1/, k2/, …
+│   │       └── zarr.json
 │   └── …
 └── N/
 ```
@@ -114,9 +121,13 @@ Concurrency:
 - Writes to different spatial chunks are independent — each chunk's
   `vertices/<i.j.k>`, `vertex_fragments/<i.j.k>`, link payloads, and
   attribute blobs can be authored without coordination.
-- `object_index/data`, `groups/data`, and `cross_chunk_links/<delta>/
-  data` are global per-level arrays; writers either serialize updates
-  or rely on a transactional backend.
+- `object_index/data` and `groups/data` are global per-level arrays;
+  writers either serialize updates or rely on a transactional backend.
+- `cross_chunk_links/<delta>/kK` arrays are sharded vlen-bytes
+  arrays; concurrent writers touching cells in **different outer
+  shards** are independent and need no coordination.  Two writers
+  writing to the same outer shard must serialize (the shard is the
+  unit of file-level atomicity).
 
 Atomicity is per Zarr's storage model (per-blob writes are atomic on
 common backends; multi-blob updates are not atomic and must be
