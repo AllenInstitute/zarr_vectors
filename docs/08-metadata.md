@@ -56,6 +56,7 @@ match the `CAP_*` constants in `zarr_vectors.constants`:
 | `"shared_fragments"`     | At least one level stores per-chunk fragments referenced by multiple objects' manifests.  Successor to the pre-0.6 `shared_vertex_groups` token. |
 | `"fragment_index"`       | The store uses the v0.6 fragment-index encoding for `vertex_fragments/` and `link_fragments/`.  Mandatory for 0.6+ stores. |
 | `"multiscale_links"`     | The store uses the `<delta>` sub-folder layout for `links/`, `cross_chunk_links/`, `link_attributes/`, and `cross_chunk_link_attributes/` and may contain cross-pyramid-level edges.  Absent on stores with `cross_level_storage = "none"` *and* no other `delta ≠ 0` arrays. |
+| `"partitioned_cross_chunk_links"` | The store uses the v0.8 partitioned cross-chunk-link layout (K-deep leaves keyed by sorted unique chunks; `9 * link_width` bytes per record; `layout = "partitioned_v1"` stamped on every `cross_chunk_links/<delta>/` group).  Coupled with `"multiscale_links"`: any store with a `cross_chunk_links/<delta>/` group MUST carry both tokens.  Stores carrying `"multiscale_links"` without `"partitioned_cross_chunk_links"` are v0.7-era monolithic-blob stores; v0.8 readers fail clearly until the store is migrated ([§10.9](10-cross-chunk-linking.md#109-migration-from-v07)). |
 
 There is no `shared_vertex_groups` token — it was renamed to
 `shared_fragments` in 0.6 along with the underlying sharing primitive.

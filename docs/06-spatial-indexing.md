@@ -81,7 +81,7 @@ connectivity is then expressed by one of two strategies:
   vertex per shared boundary point.
 - **Explicit cross-chunk links** (`cross_chunk_strategy =
   "explicit_links"`, the default): each cross-chunk edge or face is
-  written as a record in `cross_chunk_links/0/data` with
+  written as a record in `cross_chunk_links/0/<chunk_sorted_0>/.../<chunk_sorted_{K-1}>/data` with
   `(chunk_A, vi_A)` / `(chunk_B, vi_B)` endpoints.  No vertex
   duplication.
 

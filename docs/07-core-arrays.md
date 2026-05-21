@@ -405,26 +405,46 @@ the explicit standard convention (`object_index_convention =
 ## 7.7 Cross-Chunk Links
 
 - **Name**: `cross_chunk_links`
-- **Path**: `<level>/cross_chunk_links/<delta>/data` (single flat
-  blob per delta).
-- **Payload**: `num_links` records back-to-back.  Each record holds
-  `link_width` endpoints, each endpoint a
-  `(int64 chunk_coords[sid_ndim], int64 local_vertex_index)`.
-- **`.zattrs`**: `{"zv_array": "cross_chunk_links", "level_delta":
-  <delta>, "link_width": L, "num_links": M, "sid_ndim": ndim}`.
-- **Endpoint level convention**: endpoint 0 lives at the *owning*
-  resolution level L; endpoints `k > 0` live at `L + delta`.  For
-  `delta = 0` both endpoints are at the same level; for `delta ≠ 0`
-  endpoint 0 is at level L and the remaining endpoints are at level
-  `L + delta` (which may have a different `chunk_shape` and therefore
-  a different chunk grid — see [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).
+- **Path** (v0.8+): records are filed into a **K-deep leaf** keyed by
+  the sorted unique chunks they touch:
+  `<level>/cross_chunk_links/<delta>/<chunk_sorted_0>/<chunk_sorted_1>/.../<chunk_sorted_{K-1}>/data`
+  where `K` is the number of distinct chunks the records in this leaf
+  involve (`1 ≤ K ≤ link_width`).  Each `<chunk_sorted_i>` is the
+  dot-separated chunk-coord string used by `vertices/<chunk_key>`,
+  emitted in lex order.  See [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-partitioned-by-sorted-unique-chunks)
+  for the full layout description.
+- **Per-record payload**: each record is `link_width` chunk-indices
+  (uint8, one per endpoint) followed by `link_width` local vertex
+  indices (int64, one per endpoint) — total `9 * link_width` bytes
+  per record.  The chunk-index `ci_i` selects one of the K sorted
+  segments in the leaf path; that's the chunk endpoint `i` lives in.
+  No chunk coords are repeated inside the payload.
+- **Group-level `.zattrs`**: `{"zv_array": "cross_chunk_links",
+  "level_delta": <delta>, "link_width": L, "sid_ndim": ndim, "layout":
+  "partitioned_v1"}`.  `num_links` is no longer at the group level —
+  per-leaf counts are derived from leaf byte length as
+  `len(bytes) / (9 * link_width)`.
+- **Endpoint level convention**: endpoint 0 (`ci_0`, `vi_0`) lives at
+  the *owning* resolution level L; endpoints `k > 0` live at `L +
+  delta`.  For `delta = 0` both endpoints are at the same level; for
+  `delta ≠ 0` endpoint 0 is at level L and the remaining endpoints are
+  at level `L + delta` (which may have a different `chunk_shape` and
+  therefore a different chunk grid — see [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).
+- **Canonicalization**: writers MUST emit `ci = [0, 1]` for
+  `delta = 0 AND link_width = 2` (undirected edges).  Other cases
+  have no spec-mandated canonicalization; the `ci` permutation
+  preserves semantic ordering (source/target for cross-level links,
+  face winding for mesh records).
 - **`link_width` values**: same as [§7.5](#75-vertex-links) — `2` for edges, `3` for
   triangle faces (the v0.5 replacement for the dropped
   `cross_chunk_faces/` array), `1` for single child references in
   metanode drill-down.
-- **Optional capability**: when any non-zero-delta `cross_chunk_links`
-  array exists, the store advertises `CAP_MULTISCALE_LINKS` in its
-  `format_capabilities`.
+- **Capabilities**: any `cross_chunk_links/<delta>/` group at any
+  delta makes the store advertise both `CAP_MULTISCALE_LINKS` and
+  `CAP_PARTITIONED_CROSS_CHUNK_LINKS` in its `format_capabilities`.
+  Stores that carry `multiscale_links` without
+  `partitioned_cross_chunk_links` are v0.7-era monolithic-blob stores
+  and need migration before a v0.8 reader can open them — see [§10.9](10-cross-chunk-linking.md#109-migration-from-v07).
 
 ## 7.8 Link Attributes
 
@@ -439,13 +459,21 @@ the explicit standard convention (`object_index_convention =
 ## 7.9 Cross-Chunk Link Attributes
 
 - **Name**: `cross_chunk_link_attributes`
-- **Path**: `<level>/cross_chunk_link_attributes/<name>/<delta>/data`.
-- **Payload**: row-aligned to `cross_chunk_links/<delta>/data`.  Shape
-  `(num_links,)` or `(num_links, C)`.
-- **`.zattrs`**: `{"zv_array": "cross_chunk_link_attribute", "name":
-  "<name>", "dtype": "<dtype>", "shape": [...]}`.
-- **Length is runtime-checked** against the parallel CCL array's
-  `num_links` field — a desynchronized write fails loudly.
+- **Path** (v0.8+): partitioned in lockstep with `cross_chunk_links/`:
+  `<level>/cross_chunk_link_attributes/<name>/<delta>/<chunk_sorted_0>/.../<chunk_sorted_{K-1}>/data`.
+  One attribute leaf per matching cross-chunk-link leaf at the same
+  `(delta, sorted-chunks-path)`.
+- **Per-leaf payload**: one row per cross-chunk record in the
+  matching link leaf, in record order.  Shape `(num_records_in_leaf,)`
+  or `(num_records_in_leaf, C)` for multi-channel attributes.
+- **Group-level `.zattrs`**: `{"zv_array": "cross_chunk_link_attribute",
+  "name": "<name>", "dtype": "<dtype>", "level_delta": <delta>,
+  "shape": null or [C], "layout": "partitioned_v1"}`.  `num_links` is
+  no longer stored at the group level.
+- **Per-leaf parity invariant**: for every attribute leaf, its record
+  count equals the parallel `cross_chunk_links/<delta>/<same path>/data`
+  leaf's record count.  A desynchronized write fails loudly at read
+  time.
 
 ## 7.10 Object Attributes
 

@@ -64,8 +64,8 @@ Default per-array codec pipelines (from
 | `object_attributes/<name>`                   | user-declared                                                         | Blosc(Zstd, clevel=5)                                                                               | BYTE-SHUFFLE |
 | `groups`                                     | `int64` (ragged CSR of object IDs + offsets)                          | Blosc(Zstd, clevel=5)                                                                               | BYTE-SHUFFLE |
 | `group_attributes/<name>`                    | user-declared                                                         | Blosc(Zstd, clevel=5)                                                                               | BYTE-SHUFFLE |
-| `cross_chunk_links/<delta>`                  | `int64` (endpoint records — see [§11.3](11-compression-and-encoding.md#113-standard-compression-codecs)) | Blosc(Zstd, clevel=5)                                                            | BYTE-SHUFFLE |
-| `cross_chunk_link_attributes/<name>/<delta>` | user-declared                                                         | Blosc(Zstd, clevel=5)                                                                               | BYTE-SHUFFLE |
+| `cross_chunk_links/<delta>/<c_sorted_0>/.../<c_sorted_{K-1}>` | opaque `uint8` (`L * uint8 ci` + `L * int64 vi` per record; v0.8 partitioned layout — see [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-partitioned-by-sorted-unique-chunks)) | Blosc(Zstd, clevel=5)                                                            | BYTE-SHUFFLE |
+| `cross_chunk_link_attributes/<name>/<delta>/<c_sorted_0>/.../<c_sorted_{K-1}>` | user-declared                                                         | Blosc(Zstd, clevel=5)                                                                               | BYTE-SHUFFLE |
 
 Mesh stores may use Draco-encoded vertex+face co-encoding instead of
 the raw Blosc pipeline; the per-array `.zattrs.encoding = "draco"`
@@ -106,7 +106,7 @@ Common access patterns and which arrays they touch:
 | All objects in a group               | `groups/data` → object ids → `object_index/data` → vertices              |
 | Per-object attribute query           | `object_attributes/<name>/data` (no vertex read)                         |
 | Pyramid drill-down (fine → coarse)   | `links/+1/<chunk>` (when `cross_level_storage != "none"`)                |
-| Cross-chunk traversal                | `cross_chunk_links/0/data`                                               |
+| Cross-chunk traversal                | `cross_chunk_links/0/<min(A,B)>/<max(A,B)>/data` — sort the chunk pair and read one leaf |
 
 ## Appendix G: Migration Guide
 
@@ -114,6 +114,15 @@ There is no in-place migration utility across major ZV versions
 (0.4 → 0.5 → 0.6 → 0.7).  Each step changed the on-disk record
 layout in a way that breaks readers built for the previous version;
 stores must be **rewritten from source**.
+
+**0.7 → 0.8** is the exception.  The 0.8 change repartitions
+`cross_chunk_links/<delta>/data` (the single monolithic blob) into
+per-(sorted-unique-chunks) leaves with a denser record encoding
+([§10.6](10-cross-chunk-linking.md#106-on-disk-layout-partitioned-by-sorted-unique-chunks)).
+A one-shot in-place migration helper regroups the records by their
+sorted unique chunks and rewrites the leaves; everything else in the
+store stays as-is.  See [§10.9](10-cross-chunk-linking.md#109-migration-from-v07)
+for the migration utility signature and behaviour.
 
 See Appendix K below for the per-version summary.
 
@@ -169,49 +178,127 @@ See Appendix K below for the per-version summary.
 
 ## Appendix K: Change Log
 
-Each entry is a hard break — no migration utility ships; rewrite
-stores from source between major versions.
+ZV is versioned per-feature, not per-release: every entry below
+describes a breaking on-disk change made under a single version bump.
+Each major version is a hard break — rewrite stores from source
+between versions — with one exception: **0.7 → 0.8** ships an
+in-place migration helper for the partitioned cross-chunk-link layout
+(see [§10.9](10-cross-chunk-linking.md#109-migration-from-v07)).
 
-- **0.7.0** — per-level `chunk_shape` override on `LevelMetadata`.
+### Version-at-a-glance
+
+| Version | Headline change | New capability tokens | Hard break? | Migration |
+|---------|-----------------|-----------------------|-------------|-----------|
+| **0.8** | Partitioned `cross_chunk_links/<delta>/` (K-deep leaves keyed by sorted unique chunks) | `partitioned_cross_chunk_links` | Yes | **In-place helper** ([§10.9](10-cross-chunk-linking.md#109-migration-from-v07)) |
+| **0.7** | Per-level `chunk_shape` override (`LevelMetadata.chunk_shape`); pyramid levels may grow chunks | — | Yes | Rewrite |
+| **0.6** | Fragment-index byte layout for `vertex_fragments/` + `link_fragments/`; manifest-block `object_index/data` | `fragment_index`, `shared_fragments` (replaces `shared_vertex_groups`) | Yes | Rewrite |
+| **0.5** | NGFF axis alignment; `format_version` → `zv_version`; flat `(K,)` vertex-offset layout; drops `vertex_counts/`, `metanode_children/`, `cross_chunk_faces/`, `object_index/pending/` | — | Yes | Rewrite |
+| **0.4.1** | Bare-integer level group names (`0/`, `1/`, …) | — | Yes (path-only) | Rewrite |
+| **0.4** | `<delta>` sub-folder layout for `links/`, `cross_chunk_links/`, `link_attributes/`, `cross_chunk_link_attributes/`; cross-pyramid-level link arrays | `multiscale_links` | Yes | Rewrite |
+
+### Cumulative capability set as of v0.8
+
+A v0.8 store may carry any subset of:
+
+- `multiscale_links` (any `delta ≠ 0` link array present; first
+  available in 0.4)
+- `partitioned_cross_chunk_links` (any `cross_chunk_links/<delta>/`
+  group present; coupled with `multiscale_links`; mandatory in 0.8+)
+- `fragment_index` (mandatory in 0.6+)
+- `shared_fragments` (per-chunk fragments referenced by multiple
+  object manifests; renamed from `shared_vertex_groups` in 0.6)
+- `preserved_object_ids` (per-object pyramid retained the parent's
+  OID space; available since 0.4)
+
+Tokens are open-set; readers must tolerate unknown values.
+
+### Per-version detail
+
+- **0.8.0** — partitioned cross-chunk-link layout
+  ([§10.6](10-cross-chunk-linking.md#106-on-disk-layout-partitioned-by-sorted-unique-chunks)).
+  The single monolithic `cross_chunk_links/<delta>/data` int64 blob
+  (and its parallel
+  `cross_chunk_link_attributes/<name>/<delta>/data`) is replaced by
+  **K-deep leaves** keyed by the sorted unique set of chunks each
+  record touches: leaves live at
+  `cross_chunk_links/<delta>/<chunk_sorted_0>/.../<chunk_sorted_{K-1}>/data`.
+  Each record's encoding drops from `link_width * (sid_ndim + 1) * 8`
+  bytes (chunk coords baked into the payload) to `9 * link_width`
+  bytes (chunk identity recovered from the leaf path's K segments via
+  a per-endpoint `uint8` chunk-index in the record).  Canonicalization
+  rule: `delta=0, link_width=2` records MUST emit `ci = [0, 1]` (one
+  orientation per undirected edge).  New `layout = "partitioned_v1"`
+  discriminator stamped on every `cross_chunk_links/<delta>/` group
+  `.zattrs`; new `partitioned_cross_chunk_links` capability token,
+  coupled with `multiscale_links` (any store with a
+  `cross_chunk_links/<delta>/` group MUST carry both).  `num_links`
+  is no longer at the group level — per-leaf counts are derivable
+  from leaf byte length (`len(bytes) / (9 * link_width)`).  Migration:
+  **in-place helper** that regroups records by their sorted unique
+  chunks, rewrites the leaves, and bumps `zv_version` —
+  see [§10.9](10-cross-chunk-linking.md#109-migration-from-v07).
+
+- **0.7.0** — per-level `chunk_shape` override on `LevelMetadata`
+  ([§6.6](06-spatial-indexing.md#66-per-level-chunk-shape-v07)).
   `RootMetadata.chunk_shape` remains the level-0 default; pyramid
   levels may carry a positive-integer-multiple chunk-shape override
-  so coarser levels can grow chunks the way OME-Zarr image
-  pyramids do via voxel-size scaling.  Cross-pyramid-level link
-  arrays already carry both endpoints' chunk coords inline; the
-  per-axis multiplier is exposed by
-  `chunk_scale_factor(root, level)`.
+  so coarser levels can grow chunks the way OME-Zarr image pyramids
+  do via voxel-size scaling.  Invariant: per-level `chunk_shape`
+  must be a positive integer multiple of root `chunk_shape` along
+  every axis (nested chunk grids).  Cross-pyramid-level link arrays
+  carried both endpoints' chunk coords inline (still true under 0.8
+  via the K-deep leaf path); the per-axis multiplier is exposed by
+  `chunk_scale_factor(root, level)`.  Migration: rewrite (no helper).
 
-- **0.6.0** — fragment-index schema.  `vertex_group_offsets` was
-  replaced by `vertex_fragments` (a v1 byte layout with header,
-  range bitmap, range table, and CSR explicit list — see [§7.3](07-core-arrays.md#73-vertex-fragments)).
-  Inline self-describing link blobs at `delta = 0` were split into
-  `links/0/<chunk>` (flat payload) + `link_fragments/<chunk>`
-  (fragment index).  `object_index/data` adopted the manifest-block
-  encoding (modes 0 / 1 / 2 — single / range / explicit) with
-  chunk-local fragment references.  The `shared_vertex_groups`
-  capability token was renamed to `shared_fragments` and the new
-  `fragment_index` capability is mandatory.
+- **0.6.0** — fragment-index byte layout
+  ([§7.3](07-core-arrays.md#73-vertex-fragments)).
+  `vertex_group_offsets` is replaced by `vertex_fragments` — a v1
+  byte layout with header, range bitmap, range table, and explicit-
+  CSR row indices, supporting vertex re-use across fragments.
+  Inline self-describing link blobs at `delta = 0` are split into a
+  flat `links/0/<chunk>` payload plus a sibling
+  `link_fragments/<chunk>` group with the same v1 fragment-index
+  layout.  `object_index/data` adopts the manifest-block encoding
+  (modes 0 / 1 / 2 — single / range / explicit) with chunk-local
+  fragment references.  The `shared_vertex_groups` capability token
+  is renamed to `shared_fragments` (the sharing primitive is now a
+  fragment, not a contiguous-byte vertex group); the new
+  `fragment_index` capability is mandatory for 0.6+ stores.
+  Migration: rewrite.
 
-- **0.5.0** — NGFF alignment + format simplification.  Several
-  on-disk simplifications shipped without a version bump (consumers
-  should pin to a specific point release): renamed
-  `format_version` → `zv_version`; moved axes to NGFF
-  `multiscales[0].axes`; dropped per-array dtype duplication;
-  removed `vertex_counts/`, `metanode_children/`, `cross_chunk_faces/`,
-  `attributes/<name>/<key>_offsets`, and `object_index/pending/`;
-  replaced the `(K, 2)` paired offset layout with a flat `(K,)` int64
-  array of vertex offsets (later replaced again by the fragment
-  index in 0.6).
+- **0.5.0** — NGFF alignment and format simplification.  Several
+  on-disk simplifications shipped under the 0.5 series without
+  separate version bumps (consumers should pin to a specific point
+  release):
+  - renamed `format_version` → `zv_version` to disambiguate from
+    Zarr v3's `zarr_format` field;
+  - moved axes to NGFF `multiscales[0].axes` (no longer duplicated
+    under `spatial_index_dims`);
+  - dropped per-array dtype duplication (read from `zarr.json`
+    `data_type` directly);
+  - removed `vertex_counts/`, `metanode_children/`,
+    `cross_chunk_faces/`, `attributes/<name>/<key>_offsets`, and
+    `object_index/pending/`;
+  - replaced the `(K, 2)` paired vertex-offset layout with a flat
+    `(K,)` int64 vertex-offsets array (itself superseded by the
+    fragment index in 0.6);
+  - cross-chunk face identity moves to `cross_chunk_links/<delta>/`
+    with `link_width = 3`.
+  Migration: rewrite.
 
-- **0.4.1** — bare-integer resolution-level group names (`0/`, `1/`).
-  Renamed from `resolution_0/`, `resolution_1/`, … to mirror OME-Zarr.
+- **0.4.1** — bare-integer resolution-level group names (`0/`, `1/`,
+  …, `N/`).  Renamed from `resolution_0/`, `resolution_1/`, … to
+  mirror OME-Zarr's level naming.  Path-level break only; on-disk
+  array layouts identical to 0.4.  Migration: rename level groups in
+  place.
 
 - **0.4** — multiscale-link arrays.  Introduced the `<delta>`
   sub-folder layout for `links/`, `cross_chunk_links/`,
   `link_attributes/`, and `cross_chunk_link_attributes/` and the
-  `cross_level_depth` / `cross_level_storage` writer knobs.  This
-  is the version where cross-pyramid-level links became
-  expressible.
+  `cross_level_depth` / `cross_level_storage` writer knobs.  This is
+  the version where cross-pyramid-level links became expressible.
+  New `multiscale_links` capability token marks stores with any
+  `delta ≠ 0` array.  Migration: rewrite.
 
 ## Appendix L: Mapping from Neuroglancer Precomputed Annotations
 

@@ -60,12 +60,13 @@ A ZV store is a **Zarr v3 group** at its root.  Its on-disk layout
 │   │       └── data
 │   ├── cross_chunk_links/
 │   │   └── 0/
-│   │       ├── zarr.json              # link_width, num_links, level_delta=0
-│   │       └── data
+│   │       ├── zarr.json              # sid_ndim, level_delta=0, link_width, layout="partitioned_v1"
+│   │       └── <c_sorted_0>/.../<c_sorted_{K-1}>/data
+│   │                                  # K-deep leaves, one per sorted-unique-chunk set (v0.8+)
 │   └── cross_chunk_link_attributes/
 │       └── <name>/
 │           └── 0/
-│               └── data
+│               └── <c_sorted_0>/.../<c_sorted_{K-1}>/data
 ├── 1/                                 # optional coarser level
 │   ├── zarr.json                      # may override "chunk_shape" (v0.7)
 │   ├── vertices/ …
@@ -73,8 +74,9 @@ A ZV store is a **Zarr v3 group** at its root.  Its on-disk layout
 │   │   ├── 0/                         # intra-level edges at this level
 │   │   └── +1/                        # optional fine→coarse links
 │   ├── cross_chunk_links/
-│   │   ├── 0/
-│   │   └── +1/                        # optional
+│   │   ├── 0/<c_sorted_0>/.../<c_sorted_{K-1}>/data
+│   │   └── +1/<c_sorted_0>/.../<c_sorted_{K-1}>/data
+│   │                                  # optional fine→coarse
 │   └── …
 └── N/
 ```

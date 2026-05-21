@@ -10,7 +10,7 @@ level corresponds to one submodule.
 |-------|--------------------|-------------------------------------------------------------------------------------------------|
 | 1     | `structure.py`     | Required filesystem layout: `zarr.json` parses, level groups exist, per-array groups are wired. |
 | 2     | `metadata.py`      | Root and per-level metadata schema (LinkML); conventions / capability tokens are recognized.   |
-| 3     | `consistency.py`   | Cross-array internal consistency: VG counts ≤ bins-per-chunk, manifests reference live chunks/fragments, cross-chunk links land in existing chunks, per-level vertex counts agree with `arrays_present`. |
+| 3     | `consistency.py`   | Cross-array internal consistency: VG counts ≤ bins-per-chunk, manifests reference live chunks/fragments, every CCL leaf path's K segments are lex-sorted, every record's `ci` values cover `{0..K-1}` and address existing chunks, per-leaf attribute parity holds, per-level vertex counts agree with `arrays_present`. |
 | 4     | `conformance.py`   | Convention compliance: `links_convention` matches geometry, bin-bounds spot checks for point clouds, per-geometry link-width invariants.                                                              |
 | 5     | `conformance.py`   | Multi-resolution coherence across the pyramid: nested `chunk_shape`, `bin_ratio` consistency, OID-preservation invariants, `cross_level_storage`-driven array presence.                                |
 
@@ -27,16 +27,28 @@ A representative (non-exhaustive) sample:
   recognized `"zv_array"` discriminator; chunk keys are valid
   N-tuples of non-negative integers; the manifest blob `object_index/
   data` decodes without truncation.
-- **Metadata**: `zv_version >= "0.7.0"`; `chunk_shape` length matches
+- **Metadata**: `zv_version >= "0.8.0"`; `chunk_shape` length matches
   `sid_ndim`; `links_convention`, `object_index_convention`,
   `cross_chunk_strategy`, `cross_level_storage` are in the canonical
   enumerations; `format_capabilities` tokens are recognized
   (`fragment_index`, `shared_fragments`, `preserved_object_ids`,
-  `multiscale_links`).
+  `multiscale_links`, `partitioned_cross_chunk_links`).  Any
+  `cross_chunk_links/<delta>/` group's `.zattrs.layout` equals
+  `"partitioned_v1"`; if `cross_chunk_links/<delta>/` exists then
+  root `format_capabilities` carries both `multiscale_links` and
+  `partitioned_cross_chunk_links`.
 - **Consistency**: every per-chunk `vertex_fragments/<chunk>` decodes
   to a `FragmentIndex` whose ranges land within `vertices/<chunk>`
-  row bounds; manifest blocks reference fragments that exist; CCL
-  records reference chunks present at the relevant level.
+  row bounds; manifest blocks reference fragments that exist.  For
+  every `cross_chunk_links/<delta>/<chunk_sorted_0>/.../<chunk_sorted_{K-1}>/data`
+  leaf: byte length is a multiple of `9 * link_width`; every record's
+  `ci` values are in `[0, K-1]` and their set covers `{0..K-1}`
+  (coverage invariant); for `delta=0, L=2` leaves every record has
+  `ci = [0, 1]` (canonical undirected); the K path segments are in
+  strict lex order; each path-listed chunk exists at the relevant
+  level for the endpoints that reference it.  For every parallel
+  `cross_chunk_link_attributes/<name>/<delta>/<same path>/data` leaf,
+  record count equals the link leaf's count.
 - **Conformance**: geometry-specific rules from
   `GEOMETRY_LINK_REQ` — e.g. `mesh` requires
   `links_convention == "explicit"`; `streamline` requires

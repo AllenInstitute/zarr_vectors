@@ -162,8 +162,10 @@ drosophila_central_complex_mesh.zarr/
 │   │   └── data
 │   └── cross_chunk_links/
 │       └── 0/                             # cross-chunk faces (link_width = 3)
-│           ├── zarr.json
-│           └── data
+│           ├── zarr.json                  # layout = "partitioned_v1"
+│           ├── 0.0.0/1.0.0/data           # faces touching chunks (0,0,0)+(1,0,0)
+│           ├── 0.0.0/0.1.0/1.0.0/data     # faces touching three chunks
+│           └── …                          # one nested chunk subtree per sorted-unique chunk set
 ├── 1/                                     # chunk_shape = 2× root per axis
 │   ├── zarr.json                          # zarr_vectors_level.chunk_shape set
 │   ├── vertices/
@@ -173,8 +175,8 @@ drosophila_central_complex_mesh.zarr/
 │   │   ├── +1/                            # OPTIONAL: fine→coarse mapping
 │   │   └── -1/                            # OPTIONAL: explicit storage only
 │   ├── cross_chunk_links/
-│   │   ├── 0/
-│   │   └── +1/
+│   │   ├── 0/<c_sorted_0>/.../<c_sorted_{K-1}>/data
+│   │   └── +1/<c_sorted_0>/.../<c_sorted_{K-1}>/data
 │   └── object_index/
 └── 2/                                     # chunk_shape = 4× root per axis
     └── …
@@ -259,8 +261,10 @@ mouse_cortex_skeletons.zarr/
 │   │   └── data                           # B = number of neurons
 │   └── cross_chunk_links/
 │       └── 0/
-│           ├── zarr.json                  # link_width = 1
-│           └── data                       # parent→child crossing a chunk seam
+│           ├── zarr.json                  # link_width = 1, layout = "partitioned_v1"
+│           └── <c_sorted_0>/<c_sorted_1>/data
+│                                          # parent→child crossing a chunk seam
+│                                          # one leaf per sorted (parent_chunk, child_chunk) pair
 └── 1/
     └── …                                  # per-object pyramid; preserves_object_ids
 ```
@@ -288,8 +292,12 @@ mouse_cortex_skeletons.zarr/
   `(chunk=(2,1,0), mode=0, fragment_index=3)` and
   `(chunk=(2,1,1), mode=0, fragment_index=0)`.
 - **Cross-chunk parent links**: a parent in chunk A, child in
-  chunk B → one record in `cross_chunk_links/0/data` with
-  endpoints `((A, parent_vi), (B, child_vi))`.
+  chunk B → one record at
+  `cross_chunk_links/0/<min(A,B)>/<max(A,B)>/data` with
+  `ci = (chunk_index_of_parent, chunk_index_of_child)` and
+  `vi = (parent_vi, child_vi)`.  The leaf path encodes both chunks
+  in sorted order; the `ci` permutation recovers which endpoint is
+  the parent vs child.
 
 ---
 
@@ -576,8 +584,9 @@ dti_tracts.zarr/
 │   │   └── tract_name/
 │   │       └── data
 │   └── cross_chunk_links/
-│       └── 0/
-│           └── data                       # segment-end in A → segment-start in B
+│       └── 0/<c_sorted_0>/<c_sorted_1>/data
+│                                          # segment-end in chunk A → segment-start in chunk B
+│                                          # one leaf per (sorted A, B) pair (v0.8 layout)
 ├── 1/                                     # chunk_shape grows ×2 per axis
 │   ├── zarr.json                          # zarr_vectors_level.chunk_shape set
 │   ├── vertices/                          # fewer points per streamline
@@ -589,8 +598,9 @@ dti_tracts.zarr/
 │   ├── groups/
 │   ├── group_attributes/
 │   └── cross_chunk_links/
-│       ├── 0/
-│       └── +1/                            # OPTIONAL: cross-chunk fine→coarse
+│       ├── 0/<c_sorted_0>/<c_sorted_1>/data
+│       └── +1/<c_sorted_0>/<c_sorted_1>/data
+│                                          # OPTIONAL: cross-chunk fine→coarse
 └── 2/
     └── …
 ```
@@ -607,7 +617,8 @@ dti_tracts.zarr/
   "cross_level_storage": "implicit",
   "cross_level_depth": 1,
   "format_capabilities": ["fragment_index","shared_fragments",
-                          "preserved_object_ids","multiscale_links"]
+                          "preserved_object_ids","multiscale_links",
+                          "partitioned_cross_chunk_links"]
 }
 ```
 
@@ -618,9 +629,10 @@ dti_tracts.zarr/
   blocks (explicit fragment lists) carry the ordered sequence of
   shared fragment indices that make up a streamline within that
   chunk.
-- **Cross-chunk continuation**: `cross_chunk_links/0/data` records
-  link the last vertex of a segment in chunk A to the first vertex
-  of the next segment in chunk B (`link_width = 2`).
+- **Cross-chunk continuation**: each segment-end → next-segment-start
+  is one record under the K=2 leaf at
+  `cross_chunk_links/0/<min(A,B)>/<max(A,B)>/data` (`link_width = 2`,
+  18 bytes per record).
 - **v0.7 chunk-scale growth**: level 1's `chunk_shape` is 2× root
   per axis; per-chunk fragment counts stay bounded as the pyramid
   decimates.
@@ -642,11 +654,16 @@ same store (many workers tracing neurons in different tiles).
   `links/0/<chunk>`, `link_fragments/<chunk>`, and
   `vertex_attributes/<name>/<chunk>` blobs can be authored without
   coordinating fragment numbering with any other chunk.
-- **Global arrays need coordination**: `object_index/data`,
-  `groups/data`, and `cross_chunk_links/<delta>/data` are
-  level-global byte blobs.  Writers either serialize updates or
-  use a transactional backend (e.g. icechunk) that supports atomic
-  multi-blob commits.
+- **Global arrays need coordination**: `object_index/data` and
+  `groups/data` are level-global byte blobs.  Writers either serialize
+  updates or use a transactional backend (e.g. icechunk) that supports
+  atomic multi-blob commits.
+- **Cross-chunk-link writes (v0.8 partitioned layout)** are partitioned
+  per chunk pair: each `cross_chunk_links/<delta>/<c_sorted_0>/.../<c_sorted_{K-1}>/data`
+  leaf is independent and can be appended without affecting other
+  pairs.  Concurrent writers touching different chunk pairs don't need
+  any coordination beyond what zarr already provides per leaf.  Writers
+  touching the same pair still need ordering for append safety.
 - **Capability flags**: stores that allow segment reuse advertise
   `shared_fragments`; OID-preserving pyramids built on top of these
   stores additionally advertise `preserved_object_ids`.

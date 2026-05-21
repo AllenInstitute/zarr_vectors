@@ -29,7 +29,7 @@
     (`link_width = 3` for triangles); `link_fragments/<chunk>`
     partitions faces by vertex fragment.
 - **Cross-chunk faces**: faces with three vertices in distinct
-  chunks live in `cross_chunk_links/0/data` with `link_width = 3`
+  chunks live in `cross_chunk_links/0/<chunk_sorted_0>/.../<chunk_sorted_{K-1}>/data` with `link_width = 3`
   (replacing the dropped `cross_chunk_faces/` array from pre-0.5).
 - **Multi-Resolution**: edge-collapse decimation or per-object
   metavertex aggregation; v0.7 chunk-scale growth keeps coarse-level
@@ -52,7 +52,7 @@
 - **Per-vertex attributes**: `radius`, `vertex_type` (soma / axon /
   dendrite), and so on — one row per vertex.
 - **Cross-chunk parents**: parent in chunk A, child in chunk B →
-  one record in `cross_chunk_links/0/data` with endpoints
+  one record in `cross_chunk_links/0/<chunk_sorted_0>/.../<chunk_sorted_{K-1}>/data` with endpoints
   `((A, parent_vi), (B, child_vi))`.
 - **Multi-Resolution**: path simplification (Douglas-Peucker) keeps
   branch points and reduces straight-segment density.
@@ -65,7 +65,7 @@
   array.
 - **`links_convention`**: `"implicit_sequential"` — within a
   fragment, vertex `i` connects to `i + 1`.
-- **Cross-chunk continuation**: `cross_chunk_links/0/data` with
+- **Cross-chunk continuation**: `cross_chunk_links/0/<chunk_sorted_0>/.../<chunk_sorted_{K-1}>/data` with
   `link_width = 2` records connect a segment's last vertex in chunk
   A to the next segment's first vertex in chunk B.
 - **Object identity**: one object per full streamline; its
