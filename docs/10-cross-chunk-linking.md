@@ -29,7 +29,7 @@ declares which case applies.
 Since **v0.8** the on-disk layout for this array family has been
 **partitioned by chunk**, with records stored in K-separated sharded
 vlen-bytes zarr arrays rather than a single flat int64 blob — see
-[§10.6](#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays).
+[§10.6](#106-on-disk-layout-k-separated-kn-arrays).
 The motivation: a `link_width = 2`, `sid_ndim = 3` record under the
 v0.7 layout took 64 bytes (each endpoint's chunk coords baked into
 the payload) and the whole table lived in one int64 blob per
@@ -61,7 +61,7 @@ writers touching different shards no longer conflict.
   record under `cross_chunk_links/<delta>/kK`, where `K` is the
   number of **distinct** chunks the record touches, in a cell keyed
   by the sorted-unique chunks (see
-  [§10.6](#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)).
+  [§10.6](#106-on-disk-layout-k-separated-kn-arrays)).
 - **Setting**: `cross_chunk_strategy = "explicit_links"` (the
   default).
 - **Record format**: see [§7.7](07-core-arrays.md#77-cross-chunk-links).  Each record carries `link_width`
@@ -114,7 +114,7 @@ they carry chunk + fragment references.  Edges across chunk seams
 are a separate concern handled by the per-pair leaves in
 `cross_chunk_links/0/`.
 
-## 10.6 On-Disk Layout (K-Separated Sharded vlen-bytes Arrays)
+## 10.6 On-Disk Layout (K-Separated `kN` Arrays)
 
 *Added in v0.8.*  Cross-chunk records are partitioned across
 **K-separated sharded vlen-bytes zarr Arrays**, one per distinct K
@@ -352,16 +352,16 @@ Stored on the `cross_chunk_links/<delta>/` parent group:
   "zv_array":    "cross_chunk_links",
   "sid_ndim":    3,
   "level_delta": 1,
-  "link_width":  2,
-  "layout":      "sharded_v1"
+  "link_width":  2
 }
 ```
 
-`layout = "sharded_v1"` is the on-disk discriminator that signals
-"this group uses the K-separated sharded-array layout described
-above".  A reader seeing any other value (including a legacy v0.7
-store that wrote `cross_chunk_links/<delta>/data` with no `layout`
-key) fails with a clear "run the migration helper" error.
+There is **no `layout` discriminator** — v0.8 vs legacy v0.7 is
+detected structurally: if the parent group has any `kK` zarr Array
+children, the store is v0.8; if it instead has a `data` zarr Array
+child directly under the parent group, it is a legacy v0.7 store and
+the reader raises with a pointer at the migration helper
+([§10.9](#109-migration-from-v07)).
 
 Stored on each `kK` zarr-array node under that group:
 
@@ -379,8 +379,8 @@ Stored on each `kK` zarr-array node under that group:
 `chunk_origin` is the per-axis offset subtracted from each chunk
 coord to form the cell coord; non-zero only when bounds cover
 negative chunk-coord space.  The array's own zarr metadata
-(`shape`, `chunk_shape`, codecs incl. `sharding_indexed` and
-`vlen_bytes`) is canonical for cell extent and shard packing.
+(`shape`, `chunk_shape`, codecs) is canonical for cell extent and
+storage layout.
 
 Matching attribute parent group:
 
@@ -390,13 +390,35 @@ Matching attribute parent group:
   "name":        "weight",
   "dtype":       "float32",
   "level_delta": 1,
-  "shape":       null,        // or [C] for multi-channel
-  "layout":      "sharded_v1"
+  "shape":       null         // or [C] for multi-channel
 }
 ```
 
 `num_links` is no longer at the group level in either schema — per-
 cell counts are derived from the cell payload's byte length.
+
+### 10.6.7.1 Recommended codecs (non-normative)
+
+Codec choice for each `kK` array is a writer-side performance
+decision encapsulated by zarr itself — readers work against
+sharded or unsharded `vlen_bytes` arrays identically.  The
+reference writer uses **zarr v3's `sharding_indexed + vlen_bytes`**
+codec pair with an inner chunk of `(1,)*(sid_ndim * K)` and an
+outer shard of `(4,)*(sid_ndim * K)`, for two reasons:
+
+- **File-count economics on blob backends.**  An unsharded layout
+  produces one storage object per populated cell — easy to overrun
+  per-prefix request rates on S3 / GCS as the chunk grid grows.
+  Outer shards pack `4^(sid_ndim*K)` cells into one file (e.g.
+  4096 cells/file at `sid_ndim=3, K=2`).
+- **Concurrent-write boundaries.**  The shard file is the unit of
+  atomic write.  Two writers touching cells in different shards
+  are independent; spatially-adjacent cells naturally co-locate
+  in the same shard.
+
+Writers that target a single-file or per-cell layout MAY skip
+sharding — readers do not check.  The committed reference
+implementation always emits the sharded form.
 
 ### 10.6.8 Reader access patterns
 
@@ -541,19 +563,20 @@ migration utility, which:
 1. Reads the legacy blob and decodes each record's endpoints.
 2. Groups records by `K = |unique chunks the record touches|` and by
    `sorted_chunks = tuple(sorted(set(endpoint.chunk for endpoint in record)))`.
-3. For each `K` with at least one record, creates the
-   `cross_chunk_links/<delta>/kK` sharded vlen-bytes array (shape and
-   `chunk_origin` derived from the chunk coords seen across all
-   records), and writes each `sorted_chunks` group as a single cell
-   payload using the `L · uint8 ci || L · int64 vi` encoding —
-   applying the `delta=0 L=2` `ci = [0, 1]` canonicalization along
-   the way.
-4. Applies the same regrouping to every parallel attribute blob,
+3. Deletes the legacy `data` blob before writing the new layout.
+4. For each `K` with at least one record, creates the
+   `cross_chunk_links/<delta>/kK` zarr Array (the reference writer
+   uses `sharding_indexed + vlen_bytes`; see
+   [§10.6.7.1](#10671-recommended-codecs-non-normative)) and writes
+   each `sorted_chunks` group as a single cell payload using the
+   `L · uint8 ci || L · int64 vi` encoding — applying the
+   `delta=0 L=2` `ci = [0, 1]` canonicalization along the way.
+5. Applies the same regrouping to every parallel attribute blob,
    producing matching `cross_chunk_link_attributes/<name>/<delta>/kK`
    arrays.
-5. Stamps the parent group `.zattrs` with `layout = "sharded_v1"` and
-   the root `format_capabilities` with `partitioned_cross_chunk_links`.
-6. Deletes the legacy `data` blob and bumps `zv_version` to `"0.8.0"`.
+6. Stamps the root `format_capabilities` with
+   `partitioned_cross_chunk_links` and bumps `zv_version` to
+   `"0.8.0"`.
 
 The migration is destructive (it removes the old blob after the new
 layout is in place); back up the store first if you need a recoverable

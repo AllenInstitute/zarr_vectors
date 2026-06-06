@@ -84,7 +84,7 @@
   at different pyramid levels).  Each record is `L = link_width`
   `(chunk_index, vertex_index)` pairs; the chunk identity of each
   endpoint is recovered from the cell coord's K sorted chunk segments
-  via the per-endpoint `chunk_index`.  See [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays).
+  via the per-endpoint `chunk_index`.  See [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-kn-arrays).
 - **Resolution Level**: A level in the multi-resolution pyramid,
   named by bare integer (`0/`, `1/`, …, `N/`).
 - **Pyramid-Level Delta**: The `<delta>` segment in

@@ -64,7 +64,7 @@ Default per-array codec pipelines (from
 | `object_attributes/<name>`                   | user-declared                                                         | Blosc(Zstd, clevel=5)                                                                               | BYTE-SHUFFLE |
 | `groups`                                     | `int64` (ragged CSR of object IDs + offsets)                          | Blosc(Zstd, clevel=5)                                                                               | BYTE-SHUFFLE |
 | `group_attributes/<name>`                    | user-declared                                                         | Blosc(Zstd, clevel=5)                                                                               | BYTE-SHUFFLE |
-| `cross_chunk_links/<delta>/kK`               | vlen-bytes per cell (`L * uint8 ci` + `L * int64 vi` per record; v0.8 K-separated sharded layout — see [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)) | `sharding_indexed` + `vlen_bytes` (zarr v3 native)                                                  | n/a (sharded codec) |
+| `cross_chunk_links/<delta>/kK`               | vlen-bytes per cell (`L * uint8 ci` + `L * int64 vi` per record; v0.8 K-separated sharded layout — see [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-kn-arrays)) | `sharding_indexed` + `vlen_bytes` (zarr v3 native)                                                  | n/a (sharded codec) |
 | `cross_chunk_link_attributes/<name>/<delta>/kK` | vlen-bytes per cell (user-declared row dtype)                       | `sharding_indexed` + `vlen_bytes`                                                                     | n/a (sharded codec) |
 
 Mesh stores may use Draco-encoded vertex+face co-encoding instead of
@@ -119,7 +119,7 @@ stores must be **rewritten from source**.
 `cross_chunk_links/<delta>/data` (the single monolithic blob) into
 K-separated sharded vlen-bytes zarr arrays
 (`cross_chunk_links/<delta>/kK`) with a denser record encoding
-([§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)).
+([§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-kn-arrays)).
 A one-shot in-place migration helper regroups the records by their
 sorted unique chunks and writes them into the new kN cells;
 everything else in the store stays as-is.  See
@@ -217,7 +217,7 @@ Tokens are open-set; readers must tolerate unknown values.
 ### Per-version detail
 
 - **0.8.0** — sharded cross-chunk-link layout
-  ([§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)).
+  ([§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-kn-arrays)).
   The single monolithic `cross_chunk_links/<delta>/data` int64 blob
   (and its parallel
   `cross_chunk_link_attributes/<name>/<delta>/data`) is replaced by

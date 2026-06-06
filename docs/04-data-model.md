@@ -147,7 +147,7 @@ Object reconstruction reads each block's `vertex_fragments/<chunk>`
 entries to discover which rows of `vertices/<chunk>` belong to the
 object, then optionally walks the per-(chunk-pair) leaves under
 `cross_chunk_links/0/` to recover edges crossing the chunk boundary
-(see [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)).
+(see [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-kn-arrays)).
 
 ### Identity convention
 
@@ -181,7 +181,7 @@ endpoints.
   in the same fragment-index format as `vertex_fragments/`).  Records
   that cross a chunk boundary at the same level live under
   `cross_chunk_links/0/`, filed into kN array cells keyed by the
-  sorted unique chunks each record touches ([§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)).
+  sorted unique chunks each record touches ([§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-kn-arrays)).
 - `delta ≠ 0` — cross-pyramid-level edges (optional, see [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).  The
   intra-chunk records live at `links/<delta>/<i.j.k>` (inline
   self-describing header, no `link_fragments/` companion).  Records

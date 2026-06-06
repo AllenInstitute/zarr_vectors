@@ -129,7 +129,7 @@ The format keeps these invariants:
 - Cross-level edges, when emitted, live in `links/<delta>/<chunk>`
   (intra-chunk) and `cross_chunk_links/<delta>/kK` (cross-chunk;
   K-separated sharded vlen-bytes arrays keyed by sorted unique chunks
-  — [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)),
+  — [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-kn-arrays)),
   with endpoint 0 at the owning level and endpoint k > 0 at level
   `owning + delta`.
 

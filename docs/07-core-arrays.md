@@ -414,7 +414,7 @@ the explicit standard convention (`object_index_convention =
   chunks are `(c_0, …, c_{K-1})` (lex order) lives at cell coord
   `(c_0 - origin) ⧺ … ⧺ (c_{K-1} - origin)` where `origin` is
   `kK.attrs.chunk_origin`.  See
-  [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)
+  [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-kn-arrays)
   for the full layout description.
 - **Per-record payload**: each record is `link_width` chunk-indices
   (uint8, one per endpoint) followed by `link_width` local vertex
