@@ -2,9 +2,19 @@
 
 ## 5.1 Root Structure
 
-A ZV store is a **Zarr v3 group** at its root.  Its on-disk layout
-(below — `GROUP` and `ARRAY` mark each node's Zarr node type; cell files
-sit under each array's `c/` sub-tree at `c/<i>/<j>/<k>`):
+A Zarr Vectors store is a **Zarr v3 group** at its root.
+
+**File extension.**  `.zarrvectors` is the canonical extension and the
+one to prefer in documentation, examples and generated output.  `.zv`
+is an accepted short form, useful where path length matters — deep
+scratch hierarchies on HPC filesystems, say.  The two are
+interchangeable: nothing in the format reads the extension, and a store
+opens the same either way.  A store with no extension at all is still a
+valid store.
+
+The on-disk layout (below — `GROUP` and `ARRAY` mark each node's Zarr
+node type; cell files sit under each array's `c/` sub-tree at
+`c/<i>/<j>/<k>`):
 
 ```
 <store>/
@@ -115,7 +125,7 @@ link is one whose offsets are all zero.  See
   listing the store.
 - **Sharding**: optional.  A `shard_shape` wraps the cells in Zarr v3's
   native `sharding_indexed` codec; nothing else about the layout
-  changes.  There is no ZV-specific shard format.
+  changes.  There is no shard format specific to Zarr Vectors.
 - **Non-spatial arrays**: `object_index/manifests` and `groups` are 1-D
   vlen-bytes arrays; `object_attributes/<name>` and
   `group_attributes/<name>` are dense numeric arrays.  Each is a single
@@ -133,7 +143,7 @@ link is one whose offsets are all zero.  See
 
 ## 5.3 Store Backend Requirements
 
-ZV stores work on any Zarr v3 store implementation:
+Zarr Vectors stores work on any Zarr v3 store implementation:
 
 - **Object stores**: S3, GCS, Azure Blob (via fsspec or
   store-specific adapters).
@@ -194,10 +204,10 @@ relative-offset segment and carry the family-wide policy in their own
 Resolution level groups are named as bare integers (`0/`, `1/`, …,
 `N/`), matching OME-Zarr image-pyramid level naming.
 
-Metadata is carried under Zarr v3's standard `zarr.json` files; ZV
+Metadata is carried under Zarr v3's standard `zarr.json` files; Zarr Vectors
 extends each `zarr.json` with a namespaced sub-object:
 
-- root: `zarr.json["zarr_vectors"]` for ZV fields and
+- root: `zarr.json["zarr_vectors"]` for Zarr Vectors fields and
   `zarr.json["multiscales"]` for NGFF axes (RFC 4) + per-level
   datasets entry,
 - per-level group: `zarr.json["zarr_vectors_level"]`,

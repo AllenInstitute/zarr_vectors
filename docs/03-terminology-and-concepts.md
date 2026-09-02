@@ -55,16 +55,16 @@
 - **Zarr Store**: The underlying Zarr v3 storage (filesystem, object
   store, transactional store …).
 - **Zarr Array**: A multi-dimensional array in Zarr v3 format.  In
-  ZV, each per-spatial-chunk array is a **single vlen-bytes array over
+  Zarr Vectors, each per-spatial-chunk array is a **single vlen-bytes array over
   the level's chunk grid** — one cell per spatial chunk — while the
   non-spatial arrays are single ragged or dense arrays at their
-  logical path.  Zarr handles compression and storage; ZV handles
+  logical path.  Zarr handles compression and storage; Zarr Vectors handles
   record framing inside each cell's payload.
 - **Cell**: One element of a per-chunk array — the payload bytes for
   exactly one spatial chunk.  A spatial chunk at absolute coord `c`
   occupies cell `c - chunk_grid_origin`, and its file lives at
   `<array>/c/<i>/<j>/<k>`.
-- **Chunk**: In ZV, the unit of *spatial chunking* — addressed by
+- **Chunk**: In Zarr Vectors, the unit of *spatial chunking* — addressed by
   an N-tuple in chunk-grid space.  The dot-separated form (`<i.j.k>`)
   is how a chunk is named in metadata such as `nonempty_chunks`.
 - **chunk_scale_factor**: The per-axis integer multiple of root

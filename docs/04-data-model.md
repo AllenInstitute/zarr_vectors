@@ -2,7 +2,7 @@
 
 ## 4.1 Hierarchical Organization
 
-A ZV store is a Zarr v3 group tree.  Resolution levels are bare-integer
+A Zarr Vectors store is a Zarr v3 group tree.  Resolution levels are bare-integer
 sub-groups (`0/`, `1/`, …); level `0` is full resolution.  Within each
 level, every per-spatial-chunk array is a single Zarr array over the
 level's chunk grid, one cell per chunk; the fragment-index,

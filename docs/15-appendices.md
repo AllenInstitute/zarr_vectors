@@ -2,7 +2,7 @@
 
 ## Appendix A: JSON Schema Definitions
 
-The authoritative schema for ZV root, level, and array metadata is
+The authoritative schema for Zarr Vectors root, level, and array metadata is
 the LinkML model at
 `zarr_vectors-py/schema/zarr_vectors.linkml.yaml`.
 Tools may derive JSON Schema, Pydantic models, SQLAlchemy classes,
@@ -31,9 +31,9 @@ The schema covers:
   `c - chunk_grid_origin`; occupied cells are listed in the array's
   `nonempty_chunks` attribute.
 - **Sharding**: optional, via Zarr v3's native `sharding_indexed`
-  codec.  There is no ZV-specific shard format.
+  codec.  There is no shard format specific to Zarr Vectors.
 - **Group metadata**: root, level, and per-array `zarr.json` carry
-  ZV-specific top-level keys (`zarr_vectors`,
+  Zarr Vectors top-level keys (`zarr_vectors`,
   `zarr_vectors_level`, `zv_array`) alongside the Zarr v3 standard
   `node_type` / `zarr_format` fields.
 - **Multi-store hosting**: stores work on any Zarr v3 store backend
@@ -42,7 +42,7 @@ The schema covers:
 
 ## Appendix C: Coordinate Reference Systems
 
-- ZV reuses OME-Zarr RFC 4 axes (`name`, `type`, `unit`) and RFC 5
+- Zarr Vectors reuses OME-Zarr RFC 4 axes (`name`, `type`, `unit`) and RFC 5
   `coordinateTransformations` (`scale`, `translation`) for per-level
   coordinate transforms.
 - The optional `crs` dict on root metadata is opaque to the format —
@@ -169,7 +169,7 @@ Common access patterns and which arrays they touch:
   <https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/meshes.md>
 - Neuroglancer precomputed annotation format:
   <https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/annotations.md>
-  (see Appendix K for the mapping to zarr-vectors).
+  (see Appendix K for the mapping to Zarr Vectors).
 
 ## Appendix J: Change Log
 
@@ -177,12 +177,12 @@ Common access patterns and which arrays they touch:
 prior versions of the format.  Sections 1-14 and the other appendices
 describe the current version and nothing else.*
 
-ZV is versioned per-feature, not per-release: every entry below
+Zarr Vectors is versioned per-feature, not per-release: every entry below
 describes a breaking on-disk change made under a single version bump.
 
 ### Migration
 
-**There is no in-place migration utility between any two ZV versions.**
+**There is no in-place migration utility between any two Zarr Vectors versions.**
 Every bump changed the on-disk record layout in a way that breaks
 readers built for the previous version; stores must be **rewritten from
 source**.
@@ -385,14 +385,14 @@ The [Neuroglancer precomputed annotation format](https://github.com/google/neuro
 stores small geometric primitives — points, lines, axis-aligned
 bounding boxes, and ellipsoids — with per-annotation properties,
 per-segment relationships, and a multi-resolution random-subsample
-spatial index.  It serves a similar purpose to zarr-vectors but with
+spatial index.  It serves a similar purpose to Zarr Vectors but with
 narrower geometry semantics and a different multi-resolution model.
 This appendix maps the two layouts so authors can pick the right
 target and converters can translate between them.
 
 ### K.1 Conceptual mapping
 
-| Neuroglancer Precomputed Annotations          | Zarr-vectors equivalent                                      |
+| Neuroglancer Precomputed Annotations          | Zarr Vectors equivalent                                      |
 |-----------------------------------------------|--------------------------------------------------------------|
 | `info["@type"] = "neuroglancer_annotations_v1"` | `zarr.json["zarr_vectors"]["zv_version"]` + `geometry_types` |
 | `annotation_type` (geometry discriminator)    | `geometry_types` (list) + per-record `link_width`            |
@@ -409,10 +409,10 @@ target and converters can translate between them.
 ### K.2 Mapping the four geometry primitives
 
 Precomputed annotations are zero-dimensional primitives, each carrying
-a fixed positional record.  Zarr-vectors expresses them via the
+a fixed positional record.  Zarr Vectors expresses them via the
 `geometry_types` list plus the appropriate per-record layout:
 
-| Precomputed `annotation_type` | Positional record           | Zarr-vectors representation                                                         |
+| Precomputed `annotation_type` | Positional record           | Zarr Vectors representation                                                         |
 |-------------------------------|-----------------------------|-------------------------------------------------------------------------------------|
 | `POINT`                       | 1 vector                    | `geometry_types = ["point_cloud"]`; one fragment per annotation, single vertex row. |
 | `LINE`                        | 2 vectors (endpoint A, B)   | `geometry_types = ["polyline"]` or `["line"]`; one fragment per annotation, 2-vertex range; no `links/` needed under `links_convention = "implicit_sequential"`. |
@@ -420,7 +420,7 @@ a fixed positional record.  Zarr-vectors expresses them via the
 | `ELLIPSOID`                   | 2 vectors (center, radii)   | `geometry_types = ["point_cloud"]` with per-object attributes `center` and `radii`.  Same shape as option (a) for AABB.  Centers populate `vertices/<chunk>`; the `radii` `object_attribute` carries the second vector. |
 | `POLYLINE`                    | uint32 count + N vectors    | `geometry_types = ["polyline"]`; one fragment per polyline (a range `[start, count)` over `vertices/<chunk>`); manifest in `object_index/manifests` carries one block per chunk the polyline crosses; `links_convention = "implicit_sequential"`. |
 
-Multi-geometry stores are natural in zarr-vectors (just list every
+Multi-geometry stores are natural in Zarr Vectors (just list every
 geometry in `geometry_types`); the precomputed format restricts a
 single store to one `annotation_type` and would require co-locating
 several stores to mix kinds.
@@ -432,28 +432,28 @@ per-vertex (or per-object) attributes:
 
 - Numeric properties (`uint8`, `int8`, ..., `float32`) → typed
   `vertex_attributes/<name>/<chunk>` or `object_attributes/<name>`.
-  Zarr-vectors uses the array's `dtype` directly; no per-property
+  Zarr Vectors uses the array's `dtype` directly; no per-property
   enum table is needed at the schema level.
 - `rgb` / `rgba` → either an `(N, 3)` / `(N, 4)` uint8 attribute, or
   three / four channels of a multi-channel attribute with declared
   `channel_names`.
 - `enum_values` / `enum_labels` → carried as `channel_names` /
-  per-attribute side metadata.  Zarr-vectors does not currently
+  per-attribute side metadata.  Zarr Vectors does not currently
   reserve a top-level enum-mapping slot; writers stamp the mapping
   as a JSON dict in the attribute's `.zattrs`.
 
 **Relationships** (each annotation linked to a list of segment IDs)
-map onto zarr-vectors **groups**:
+map onto Zarr Vectors **groups**:
 
 - The precomputed `relationships[<rel_name>]` becomes a per-relationship
   `groups` array (or, if multiple relationships, one `groups`-like
   structure per relationship name — typically expressed today by
   rechunking by relationship; see [§8](08-metadata.md)).
 - Each group corresponds to one segment id.  Its membership list is
-  the annotation IDs (= object IDs in zarr-vectors).
+  the annotation IDs (= object IDs in Zarr Vectors).
 - The inverse — annotation → list of segments — is then the
   group-membership matrix (which annotations belong to which groups);
-  in zarr-vectors this is recovered by iterating `groups`, the
+  in Zarr Vectors this is recovered by iterating `groups`, the
   same operation that powers "show all annotations on segment X" in
   precomputed.
 
@@ -467,7 +467,7 @@ bounded, but the *selection rule* differs:
   level; the rest propagate to finer children.  Cell coverage is
   controlled by `grid_shape` × `chunk_size`, anchored at
   `lower_bound`.  Levels coarsen by integer division of cells.
-- **Zarr-vectors**: each level has a fixed `bin_shape` (and
+- **Zarr Vectors**: each level has a fixed `bin_shape` (and
   optionally an overridden `chunk_shape`).  Coarsening is
   per-object: each surviving object's vertices are aggregated into
   metavertices at the coarser bin grid.  `object_sparsity ∈ (0, 1]`
@@ -475,7 +475,7 @@ bounded, but the *selection rule* differs:
 
 Equivalents:
 
-| Concept                            | Precomputed                       | Zarr-vectors                                       |
+| Concept                            | Precomputed                       | Zarr Vectors                                       |
 |------------------------------------|-----------------------------------|----------------------------------------------------|
 | Grid cells per axis at level L     | `spatial[L].grid_shape`           | `ceil((bounds_max - bounds_min) / chunk_shape_L)`  |
 | Cell size at level L               | `spatial[L].chunk_size`           | `RootMetadata.chunk_shape` × per-level `chunk_scale_factor` |
@@ -484,16 +484,16 @@ Equivalents:
 | Drillable parent→child mapping     | implicit (random subsample)       | optional `links/<delta>/<offsets>` arrays ([§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional))   |
 
 Precomputed's "drill the visible cells until you've returned at most
-`limit` annotations per cell" maps to zarr-vectors' "ask each level
+`limit` annotations per cell" maps to Zarr Vectors' "ask each level
 for the object set; stop when `object_sparsity * source_count` fits
 your budget."  The precomputed model is simpler and gets random
-sampling for free; the zarr-vectors model is more general (handles
+sampling for free; the Zarr Vectors model is more general (handles
 extended objects, not just points) at the cost of an explicit
 coarsener.
 
 ### K.5 Practical conversion notes
 
-- **Single annotation type → single zarr-vectors store** is a
+- **Single annotation type → single Zarr Vectors store** is a
   straightforward 1:1 transcode.  Pick the geometry mapping from
   [§K.2](#k2-mapping-the-four-geometry-primitives); emit one fragment per annotation; populate `object_index/`
   in dense OID order from the original `by_id` listing.
@@ -505,15 +505,15 @@ coarsener.
   most segments touch zero or one annotation.
 - **Spatial index** does NOT transcode 1:1.  The pyramid is rebuilt
   using the per-object coarsener; the precomputed `limit` rule has
-  no direct zarr-vectors equivalent.  A reasonable default is
+  no direct Zarr Vectors equivalent.  A reasonable default is
   `reduction_factor = 8`, `object_sparsity ≈ limit / max_cell_count`
   per level, and `cross_level_storage = "implicit"` if downstream
   readers need to drill from coarse to fine.
 - **Sharded vs unsharded** is invisible to the schema mapping —
-  zarr-vectors writes per-chunk blobs into a Zarr v3 store regardless
+  Zarr Vectors writes per-chunk blobs into a Zarr v3 store regardless
   of the backend's sharding.
 
-### K.6 What zarr-vectors adds over precomputed annotations
+### K.6 What Zarr Vectors adds over precomputed annotations
 
 - **Connected geometries** (polylines with branches, skeletons,
   meshes) live in the same store, not just zero-dimensional
@@ -534,15 +534,15 @@ coarsener.
   default, but mesh decimation and streamline point-reduction slot
   into the same level structure.
 
-### K.7 What precomputed annotations preserve that zarr-vectors does not (yet)
+### K.7 What precomputed annotations preserve that Zarr Vectors does not (yet)
 
-- **Sharded back-end** as a first-class schema concern.  Zarr-vectors
+- **Sharded back-end** as a first-class schema concern.  Zarr Vectors
   delegates sharding to the underlying Zarr v3 store; it does not
   expose `sharding` blocks per index.
 - **Per-property enum tables** as a typed schema field
-  (`enum_values` / `enum_labels`).  Zarr-vectors carries this as
+  (`enum_values` / `enum_labels`).  Zarr Vectors carries this as
   free-form `.zattrs` metadata.
 - **The "limit" LOD heuristic** — automatic, occupancy-driven
-  downsampling without writing a coarsening pass.  In zarr-vectors
+  downsampling without writing a coarsening pass.  In Zarr Vectors
   the writer must pick `bin_ratio` / `chunk_scale_factor` /
   `object_sparsity` deliberately.

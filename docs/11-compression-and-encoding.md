@@ -2,7 +2,7 @@
 
 ## 11.1 Compression Overview
 
-ZV applies **per-chunk compression** via Zarr v3's codec pipeline on
+Zarr Vectors applies **per-chunk compression** via Zarr v3's codec pipeline on
 each single-chunk `uint8` blob.  All format-level structure
 (fragment-index, manifest blocks, link records) lives *inside* the
 compressed payload; compression is opaque to record framing.
@@ -86,7 +86,7 @@ stream ([§7.6](07-core-arrays.md#76-object-index)) are
 **project-internal record framings**.  They live *inside* the raw
 bytes the Zarr codec pipeline sees as opaque uint8 input.  The Zarr
 codec registry has only the standard codecs (`blosc`, `zstd`, `gzip`,
-`shuffle`, `bytes`, …); ZV does not register any custom Zarr codec.
+`shuffle`, `bytes`, …); Zarr Vectors does not register any custom Zarr codec.
 This separation lets a reader peel the codec pipeline (where one is
 applied) and then run the project-internal decoder without coupling
 either layer to the other.
@@ -149,5 +149,5 @@ Per-array `.zattrs` (under each array group's `zarr.json`) carries:
   array; see [§5.2](05-zarr-store-structure.md#52-zarr-version-requirements).
 
 The Zarr v3 codec pipeline (`codecs[]` in the standard `zarr.json`
-block) carries the actual codec config; per-array ZV metadata
+block) carries the actual codec config; per-array Zarr Vectors metadata
 duplicates only the fields that matter for non-decoding readers.

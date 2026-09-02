@@ -124,7 +124,7 @@ quietly:
   come from the same source.  A coarsening factor of 1.5 on a root bin
   of 8 gives `translation = 6.0` — correct — while a `bin_ratio`
   rounded to the nearest integer would give `scale = 2.0`, a third too
-  large.  Nothing in the ZV API would show the disagreement; any NGFF
+  large.  Nothing in the Zarr Vectors API would show the disagreement; any NGFF
   viewer would render it.
 - **`scale` is a float multiplier with no integer requirement**, and
   is read back without rounding.  Rounding on the way in or out means

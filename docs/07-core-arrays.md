@@ -121,6 +121,12 @@ payload already carries (e.g. `vertex_fragments` does not store
 - **`.zattrs`**: `{"zv_array": "vertex_fragments", "encoding":
   "fragment_index_v1"}`.  All structural numbers (F, R, T) live in the
   blob header so the attributes stay minimal.
+- **On the magic bytes**: `'ZVFG'` is a fixed on-disk constant that
+  every store ever written carries.  Read it as an opaque identifier,
+  not as a name or abbreviation for the format, which is **Zarr
+  Vectors**.  The same applies to the `zv_` prefix on `zv_array` and
+  `zv_version`: those are frozen key names, not an abbreviation to use
+  in prose.
 - **Empty chunk**: a 16-byte header-only blob with `F = 0`, `R = 0`,
   no bitmap, no range table, no CSR.
 - **Random access**: `is_range(f)` is a single bit lookup; `range(f)`
@@ -141,7 +147,7 @@ subsection explains why.  On codec choices for the blob itself see
 #### The single-owner vs. multi-owner tradeoff
 
 The fragment-index format settles a question that recurs at every
-layer of ZV's ownership hierarchy: **can one element be referenced
+layer of the Zarr Vectors ownership hierarchy: **can one element be referenced
 by more than one owner?** The same tension appears between vertices
 or links and fragments (does a single row of `vertices/<chunk>`
 belong to one fragment or many?), between fragments and objects

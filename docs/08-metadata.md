@@ -2,7 +2,7 @@
 
 ## 8.1 Metadata Structure
 
-A ZV store carries metadata at five levels:
+A Zarr Vectors store carries metadata at five levels:
 
 1. **Root metadata** — under `zarr.json["zarr_vectors"]` at the store
    root, plus the NGFF axes / datasets block under
@@ -25,7 +25,7 @@ RFC 4 / 5 layout); they are **not** duplicated under `"zarr_vectors"`.
 
 | Field                       | Type                                    | Description |
 |-----------------------------|-----------------------------------------|-------------|
-| `zv_version`                | string (`"X.Y.Z"`)                      | ZV spec version. |
+| `zv_version`                | string (`"X.Y.Z"`)                      | Zarr Vectors spec version. |
 | `chunk_shape`               | `[float, ...]`                          | Level-0 default chunk shape (one entry per space axis).  Per-level overrides live in `zarr_vectors_level.chunk_shape`. |
 | `bounds`                    | `[[float, ...], [float, ...]]`          | Global `(min_corner, max_corner)`.  Root-only — no per-level bounds. |
 | `geometry_types`            | `list[string]`                          | Subset of `{"point_cloud", "line", "polyline", "streamline", "skeleton", "graph", "mesh"}`. |
@@ -109,7 +109,7 @@ Cross-level invariants (enforced by
 
 ## 8.4 Array-Level Metadata
 
-Every array group's `zarr.json` carries a small ZV-specific block:
+Every array group's `zarr.json` carries a small Zarr Vectors block:
 
 ```json5
 {
@@ -198,7 +198,7 @@ The optional `crs` field on root metadata follows OME-Zarr RFC 4 / 5:
 
 The `multiscales` block itself is NGFF **version `"0.4"`** — the
 bare-root form, not the `attributes.ome` nesting.  NGFF reserves the
-entry's `type` field for the downsampling method, so the ZV
+entry's `type` field for the downsampling method, so the Zarr Vectors
 discriminator is stamped one level down as
 `multiscales[0]["metadata"]["format"] = "zarr_vectors"` rather than
 overloading `type`.

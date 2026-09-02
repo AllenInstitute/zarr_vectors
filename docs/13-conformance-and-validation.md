@@ -81,7 +81,7 @@ A representative (non-exhaustive) sample:
 
 ## 13.4 Compatibility
 
-- **OME-Zarr** — ZV reuses NGFF axes (RFC 4) and coordinate
+- **OME-Zarr** — Zarr Vectors reuses NGFF axes (RFC 4) and coordinate
   transformations (RFC 5); a level group's `zarr.json` carries the
   same `multiscales` block an OME-Zarr image pyramid would, so
   generic NGFF tools can at least enumerate the levels and read
@@ -90,5 +90,5 @@ A representative (non-exhaustive) sample:
 - **TRX** — when `sid_ndim` collapses to 1 and the store has a single
   spatial chunk, the layout aligns conceptually with TRX (positions
   + offsets + per-vertex / per-streamline / per-group data); see
-  [§14.8](14-examples.md#148-simple-dti-small-volume-trx-aligned) for the TRX-aligned example.  ZV does not ship a TRX
+  [§14.8](14-examples.md#148-simple-dti-small-volume-trx-aligned) for the TRX-aligned example.  Zarr Vectors does not ship a TRX
   reader/writer; converters live in `zarr-vectors-tools`.

@@ -2,7 +2,7 @@
 
 ## 6.1 Spatial Index Definition
 
-A ZV store's spatial index is a regular N-dimensional grid pinned to
+A Zarr Vectors store's spatial index is a regular N-dimensional grid pinned to
 the level-0 chunk shape:
 
 - **Axes**: declared in NGFF style under `zarr.json["multiscales"][0].axes`.
@@ -32,7 +32,7 @@ per space axis, written in the dot-separated form:
 - N-D: `<c_0.c_1.…c_{ndim-1}>`
 
 Empty chunks (no data) are simply absent from the store — Zarr v3
-returns a "fill value" miss; ZV readers treat missing chunks as
+returns a "fill value" miss; Zarr Vectors readers treat missing chunks as
 "no data here."
 
 Translating between physical position and chunk coordinate:

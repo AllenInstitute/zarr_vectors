@@ -13,7 +13,7 @@ The increasing scale of scientific and industrial 3D data presents significant c
 
 Traditional file formats (LAS, PLY, OBJ, STL) were designed for single-file, single-machine workflows. They lack spatial indexing, multi-resolution support, and distributed write capabilities. While newer formats like 3D Tiles and I3S address visualization needs, they are optimized for streaming and lack the flexibility needed for scientific computing and analysis workflows.
 
-The Zarr Vectors (ZV) format addresses these limitations by providing a cloud-native, spatially-indexed format that supports distributed uncoordinated reads and writes, native multi-resolution representations, fragment- and object-level re-use across resolution levels, and rich metadata—all built on the proven Zarr v3 storage foundation.
+The Zarr Vectors format addresses these limitations by providing a cloud-native, spatially-indexed format that supports distributed uncoordinated reads and writes, native multi-resolution representations, fragment- and object-level re-use across resolution levels, and rich metadata—all built on the proven Zarr v3 storage foundation.
 
 ## 1.2 Purpose and Goals
 
@@ -95,7 +95,7 @@ The TRX format (https://github.com/tee-ar-ex/trx-spec) provides the conceptual f
 - **Path offsets**: TRX's efficient storage of variable-length streamlines inspired the per-chunk fragment-index encoding
 - **Channel dimension**: TRX's approach to storing vertex attributes with a channel dimension is adopted
 - **Metadata model**: TRX's flexible metadata structure influenced the multi-level metadata design
-- **Compatibility**: When spatial indexing is collapsed to a single dimension, ZV closely aligns with TRX
+- **Compatibility**: When spatial indexing is collapsed to a single dimension, Zarr Vectors closely aligns with TRX
 
 ### 1.4.2 OME-Zarr
 OME-Zarr's multi-resolution approach is adapted for vector data:
@@ -103,12 +103,12 @@ OME-Zarr's multi-resolution approach is adapted for vector data:
 - **Zarr backend**: Both formats leverage Zarr's chunked storage
 - **Metadata standards**: OME-Zarr's metadata conventions (RFC 4, RFC 5) are followed for coordinate reference systems
 - **Extension model**: OME-Zarr's extensibility model influenced the design
-- **Pyramid chunk-size growth**: OME-Zarr scales image pyramids by shrinking voxel size at coarser levels (so the same chunk count covers a larger physical region).  ZV has no voxel concept, so it instead lets each pyramid level override `chunk_shape` directly; coarser levels can use larger chunks while staying nested in the level-0 grid.
+- **Pyramid chunk-size growth**: OME-Zarr scales image pyramids by shrinking voxel size at coarser levels (so the same chunk count covers a larger physical region).  Zarr Vectors has no voxel concept, so it instead lets each pyramid level override `chunk_shape` directly; coarser levels can use larger chunks while staying nested in the level-0 grid.
 
 ### 1.4.3 Zarr Specification
 Zarr provides the storage foundation:
 - **Chunked arrays**: Zarr's efficient chunked storage enables spatial indexing
-- **Ragged objects**: per-chunk byte payloads (vertices, fragment-index, links, manifests) carry their own record framing inside the cells of Zarr v3 vlen-bytes arrays — Zarr stores the bytes, ZV frames the records
+- **Ragged objects**: per-chunk byte payloads (vertices, fragment-index, links, manifests) carry their own record framing inside the cells of Zarr v3 vlen-bytes arrays — Zarr stores the bytes, Zarr Vectors frames the records
 - **Store abstraction**: Zarr's store interface enables cloud-native storage
 - **Metadata**: Zarr v3's `zarr.json` files carry format metadata under namespaced keys (`zarr_vectors`, `zarr_vectors_level`, `zv_array`)
 
@@ -118,19 +118,19 @@ The Neuroglancer precomputed mesh format influenced multi-resolution mesh design
 - **Spatial chunking**: Concept of dividing meshes into spatial regions
 - **Draco compression**: Use of Draco for mesh compression
 
-The companion [precomputed annotation format](https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/annotations.md) covers points, lines, axis-aligned bounding boxes, and ellipsoids with per-annotation properties and per-segment relationships.  ZV expresses the same primitives via `geometry_types` + per-vertex / per-object attributes + groups; coarsening differs (per-object aggregation vs random-subsample-with-limit).  See Appendix K for the field-by-field mapping.
+The companion [precomputed annotation format](https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/annotations.md) covers points, lines, axis-aligned bounding boxes, and ellipsoids with per-annotation properties and per-segment relationships.  Zarr Vectors expresses the same primitives via `geometry_types` + per-vertex / per-object attributes + groups; coarsening differs (per-object aggregation vs random-subsample-with-limit).  See Appendix K for the field-by-field mapping.
 
 ### 1.4.5 Traditional Formats (LAS, PLY, OBJ, STL)
-While ZV addresses limitations of traditional formats, it maintains conceptual compatibility:
+While Zarr Vectors addresses limitations of traditional formats, it maintains conceptual compatibility:
 - **Geometry representation**: Standard concepts (vertices, faces, edges) are preserved
-- **Attribute storage**: Traditional attribute concepts map to ZV's attribute arrays
+- **Attribute storage**: Traditional attribute concepts map to Zarr Vectors' attribute arrays
 - **Migration paths**: Clear conversion strategies from traditional formats
 
 ### 1.4.6 Visualization Formats (3D Tiles, I3S)
-ZV complements visualization-focused formats:
-- **Different goals**: 3D Tiles/I3S optimize for web streaming; ZV optimizes for analysis
+Zarr Vectors complements visualization-focused formats:
+- **Different goals**: 3D Tiles/I3S optimize for web streaming; Zarr Vectors optimizes for analysis
 - **Shared concepts**: Spatial indexing and multi-resolution are common themes
-- **Interoperability**: ZV data can be converted to visualization formats when needed
+- **Interoperability**: Zarr Vectors data can be converted to visualization formats when needed
 
 ## 1.5 Key Features
 
@@ -151,11 +151,11 @@ The Zarr Vector Format provides several key features that distinguish it from ex
 
 This specification is intended for:
 
-- **Format Implementers**: Developers creating libraries and tools to read/write ZV files
+- **Format Implementers**: Developers creating libraries and tools to read/write Zarr Vectors files
 - **Application Developers**: Developers building applications that work with large-scale vector data
 - **Data Scientists**: Researchers and analysts working with point clouds, meshes, and related data
 - **Infrastructure Engineers**: Engineers designing storage and compute systems for 3D data
-- **Format Evaluators**: Those considering ZV for their use cases and comparing it to alternatives
+- **Format Evaluators**: Those considering Zarr Vectors for their use cases and comparing it to alternatives
 
 ## 1.7 Document Structure
 

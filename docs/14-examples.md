@@ -27,7 +27,7 @@ supports coarse-to-fine visualization.
 **Directory structure**:
 
 ```
-mouse_brain_nuclei.zarr/
+mouse_brain_nuclei.zarrvectors/
 ├── zarr.json                              # root: zarr_vectors + multiscales
 ├── 0/
 │   ├── zarr.json                          # zarr_vectors_level
@@ -131,7 +131,7 @@ covers `2³` fine chunks.
 **Directory structure**:
 
 ```
-drosophila_central_complex_mesh.zarr/
+drosophila_central_complex_mesh.zarrvectors/
 ├── zarr.json
 ├── 0/
 │   ├── zarr.json                          # chunk_shape inherits root
@@ -227,7 +227,7 @@ one object that may span many spatial chunks.  Parent links
 **Directory structure**:
 
 ```
-mouse_cortex_skeletons.zarr/
+mouse_cortex_skeletons.zarrvectors/
 ├── zarr.json                              # links_convention = "implicit_sequential_with_branches"
 ├── 0/
 │   ├── zarr.json
@@ -304,7 +304,7 @@ with radius and type per vertex.
 **Directory structure**:
 
 ```
-retina_vessels_2d.zarr/
+retina_vessels_2d.zarrvectors/
 ├── zarr.json                              # sid_ndim = 2; chunk_shape = [512,512]
 ├── 0/
 │   ├── zarr.json
@@ -342,7 +342,7 @@ retina_vessels_2d.zarr/
 **Directory structure**:
 
 ```
-cell_tracks_xyzt.zarr/
+cell_tracks_xyzt.zarrvectors/
 ├── zarr.json                              # 4 space axes: x, y, z, t (t typed as "time")
 ├── 0/
 │   ├── zarr.json
@@ -378,7 +378,7 @@ and cell type; objects are cells; groups are cell-type clusters.
 **Directory structure**:
 
 ```
-merfish_celltype.zarr/
+merfish_celltype.zarrvectors/
 ├── zarr.json
 ├── 0/
 │   ├── zarr.json
@@ -426,7 +426,7 @@ per cell.
 **Directory structure**:
 
 ```
-mfish_spots_cells.zarr/
+mfish_spots_cells.zarrvectors/
 ├── zarr.json
 ├── 0/
 │   ├── zarr.json
@@ -468,9 +468,9 @@ to a single spatial chunk; the layout closely aligns with the
 [TRX format](https://tee-ar-ex.github.io/trx-python/stable/trx_specifications.html)
 to simplify conversion and interoperability.
 
-**TRX alignment** (mapping to zarr-vectors):
+**TRX alignment** (mapping to Zarr Vectors):
 
-| TRX                                  | zarr-vectors                                                 |
+| TRX                                  | Zarr Vectors                                                 |
 |--------------------------------------|--------------------------------------------------------------|
 | `positions` (NB_VERTICES × 3)        | `vertices` (single chunk)                                    |
 | `offsets` (streamline start indices) | `vertex_fragments/<chunk>` (one fragment per streamline)     |
@@ -483,7 +483,7 @@ to simplify conversion and interoperability.
 **Directory structure**:
 
 ```
-dti_small.trx.zarr/
+dti_small.trx.zarrvectors/
 ├── zarr.json                              # object_index_convention = "identity",
 │                                           # links_convention      = "implicit_sequential"
 └── 0/
@@ -541,7 +541,7 @@ chunk counts tractable.
 **Directory structure**:
 
 ```
-dti_tracts.zarr/
+dti_tracts.zarrvectors/
 ├── zarr.json                              # cross_level_storage = "implicit"
 ├── 0/
 │   ├── zarr.json
