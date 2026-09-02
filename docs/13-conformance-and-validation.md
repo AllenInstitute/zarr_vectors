@@ -34,13 +34,15 @@ A representative (non-exhaustive) sample:
   `cross_chunk_strategy`, `cross_level_storage` are in the canonical
   enumerations; `format_capabilities` tokens are recognized
   (`fragment_index`, `shared_fragments`, `preserved_object_ids`,
-  `multiscale_links`).  `object_index`'s `layout` equals
-  `"vlen_manifests_v1"`.  A store whose `layout` discriminator, array
-  names, or `format_capabilities` tokens are not among those defined
-  here MUST be **rejected outright** rather than partially read: an
-  unrecognized discriminator means the store was written to a contract
-  this document does not describe, and reading it on a best-effort
-  basis yields plausible wrong answers instead of an error.
+  `multiscale_links`) — an unrecognized token is a *validator* finding,
+  not grounds for a reader to fail, since the token set is open
+  ([Appendix H](15-appendices.md#appendix-h-extensibility)).
+  `object_index`'s `layout` equals `"vlen_manifests_v1"`; **any other
+  value MUST cause the store to be rejected outright** rather than read
+  on a best-effort basis.  An unrecognized container discriminator
+  means the store was written to a contract this document does not
+  describe, and guessing at it yields plausible wrong answers instead
+  of an error.
 - **Consistency**: every `vertex_fragments` cell decodes to a
   `FragmentIndex` whose ranges land within the row bounds of the
   `vertices` cell at the same coordinate; manifest blocks reference

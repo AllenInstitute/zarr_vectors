@@ -58,9 +58,12 @@ match the `CAP_*` constants in `zarr_vectors.constants`:
 
 Four tokens are defined.  Because a cross-chunk link is just a link
 with a non-zero offsets segment, `"multiscale_links"` says nothing
-about chunk-spanning records — only about level-spanning ones.  A token
-outside this set MUST cause the store to be rejected
-([§13.2](13-conformance-and-validation.md#132-validation-rules)).
+about chunk-spanning records — only about level-spanning ones.
+
+The set is **open**: a reader that meets a token it does not recognize
+either treats that feature as absent or declines to open the store
+([Appendix H](15-appendices.md#appendix-h-extensibility)); what it MUST
+NOT do is assume the feature is present.
 
 ## 8.3 Resolution-Level Metadata
 

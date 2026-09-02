@@ -139,9 +139,10 @@ Per-array `.zattrs` (under each array group's `zarr.json`) carries:
   the dtype without materializing the pipeline.
 - `"encoding"` — `"raw"` (default) or `"draco"` (mesh vertices only).
 - `"row_shape"` — `[]` for a scalar attribute, `[C]` for a
-  multi-channel one.  It is the authority on column count; a reader
-  MUST NOT infer width from `channel_names`, which are labels and may
-  be absent from a genuinely multi-column attribute.
+  multi-channel one.  When present it is the authority on column count
+  and MUST NOT be overridden by `channel_names`, which are labels: a
+  genuinely multi-column attribute may carry no names at all.  A reader
+  falls back to `len(channel_names)` only when `row_shape` is absent.
 - `"compression_codec"`, `"shape"`, `"channel_names"`,
   `"channel_dtype"` — optional, declared per array kind.
 - `"chunk_grid_origin"`, `"nonempty_chunks"` — on every per-chunk

@@ -407,9 +407,14 @@ row-numbered in a different chunk.
   metadata.
 - **Chunking**: manifests are chunked in buckets of at most 16 384
   objects, which sets the read-amplification ceiling for a single-OID
-  fetch.  The bucket is fixed when the array is created and cannot be
-  changed by a later resize, so it MUST NOT be derived from the number
-  of objects that happen to be present at the first write.
+  fetch.  The bucket is fixed when the array is **created** — a resize
+  cannot change a Zarr chunk shape — so a writer that sizes it from
+  however many objects the *first* flush happens to carry fixes that
+  size for the life of the store.  In a chunk-by-chunk build the first
+  flush is often a sparse edge chunk holding a few dozen objects, and
+  the resulting file count can exceed the intended one by orders of
+  magnitude; size the bucket from the expected object count, not from
+  the first write.
 - **Payload**: one manifest blob per object.  Each manifest is a
   sequence of *manifest blocks*; each block names one spatial chunk
   and a fragment reference:
