@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/_static/zarr-vectors-logo.png" alt="Zarr-vectors" width="320">
+  <img src="docs/_static/zarr-vectors-logo.png" alt="Zarr Vectors" width="320">
 </p>
 
 # Zarr Vectors Spec
