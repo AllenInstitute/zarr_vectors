@@ -60,13 +60,6 @@ Recommended pipelines by array:
 low-order bits are correlated, so bit-level de-correlation is the right
 pre-pass for Zstd.
 
-Before 0.9 this table needed a second row and a caveat: cross-chunk
-records baked each endpoint's chunk coordinates into the payload, and
-that high-entropy component made BYTE-SHUFFLE the better fit for them.
-The merged links family removed the distinction — a record no longer
-names a chunk, so every link row is now the low-entropy chunk-local
-kind and takes the same treatment.
-
 `vertex_fragments` and `link_fragments` bypass the Zarr codec pipeline
 entirely: their chunks are project-internal record framings (see
 [§7.3](07-core-arrays.md#73-vertex-fragments)) and are written as opaque

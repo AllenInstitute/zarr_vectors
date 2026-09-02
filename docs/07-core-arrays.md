@@ -18,9 +18,8 @@ cover every array in a store:
   Zarr arrays at their logical path, ragged (vlen-bytes) or dense
   (numeric) as noted per array.
 
-Throughout, `<i.j.k>` names a spatial chunk; since 0.9 that chunk is a
-*cell* of the array rather than a sub-array of its own, and its file
-lives at `<array>/c/<i>/<j>/<k>`.
+Throughout, `<i.j.k>` names a spatial chunk; that chunk is a *cell* of
+the array, and its file lives at `<array>/c/<i>/<j>/<k>`.
 
 A per-array `zarr.json` carries a `"zv_array"` discriminator plus a
 small shape/dtype block; it does **not** duplicate fields the byte
@@ -129,11 +128,6 @@ payload already carries (e.g. `vertex_fragments` does not store
 - **Compression**: none — the blob is written through the vlen-bytes
   serializer as-is.
 
-The legacy `vertex_group_offsets` array (paired `(K, 2)` int64 offsets,
-pre-0.5) was first reduced to a flat `(K,)` int64 of vertex offsets
-(0.5), then replaced entirely by `vertex_fragments` (0.6) so that
-fragment membership and row sharing can both be expressed.
-
 ### 7.3.1 Design rationale
 
 The v1 fragment-index format makes three structural choices that are
@@ -201,9 +195,9 @@ The practical consequences:
 
 - At level 0 with the default writer, every fragment is a range.
   The format collapses to "one `(start, count)` per non-empty
-  bin", byte-equivalent (modulo the bitmap and header) to the
-  pre-0.6 contiguous-row index.  The multi-owner machinery costs
-  almost nothing when no one uses it.
+  bin", byte-equivalent (modulo the bitmap and header) to a plain
+  contiguous-row index.  The multi-owner machinery costs almost
+  nothing when no one uses it.
 - At coarsened metanode-merged levels, shared metavertices appear
   as explicit fragments while non-shared coarsened fragments stay
   as ranges.  Sharing is paid for only on the rows that actually
@@ -237,13 +231,13 @@ form) is structurally simpler but fails on three counts:
    that compounds across thousands of fragments in a typical chunk.
 3. **Format predictability.**  The level-0 stable case maps cleanly
    to neighbouring formats' contiguous-row conventions (Arrow
-   run-end, Parquet RLE, the pre-0.6 `(offset, count)` table).
+   run-end, Parquet RLE, a plain `(offset, count)` table).
    Keeping that representation first-class makes the format legible
-   at a glance and makes level-0 reads byte-identical in their
-   per-chunk hot path to what the pre-0.6 format produced.
+   at a glance and keeps the level-0 per-chunk hot path as cheap as a
+   contiguous-row index would be.
 
 Conversely, forcing *every* fragment into a range would forbid the
-shared-metavertex case the 0.6 rewrite was undertaken for.  Hence
+shared-metavertex case that explicit fragments exist to serve.  Hence
 two kinds, paid for only where they're earned.
 
 #### Why the bitmap is the discriminator
@@ -294,8 +288,7 @@ the property the format exists to provide.
 
 - **Name**: `groups`
 - **Path**: `<level>/groups` — a single 1-D vlen-bytes array of shape
-  `(G,)`.  Row `gid` is that group's `int64` member-id list.  (Before
-  0.8.1 this was a `groups/` group wrapping a `data` blob.)
+  `(G,)`.  Row `gid` is that group's `int64` member-id list.
 - **`.zattrs`**: `{"zv_array": "groups", "num_groups": G}`, plus an
   optional `group_ranges` map.
 - **Contiguous groups**: a group whose members are exactly
@@ -305,9 +298,9 @@ the property the format exists to provide.
   concluding that an empty row means an empty group.
 - **Companion**: `group_attributes/<name>` is a dense array of shape
   `(G,)` or `(G, C)` with `.zattrs` `{"zv_array": "groupings_attribute",
-  "name": "<name>", "dtype": "<dtype>", "shape": [...]}`.  (The
-  discriminator literal kept the legacy string for on-disk
-  compatibility; the conceptual rename is `groupings` → `groups`.)
+  "name": "<name>", "dtype": "<dtype>", "shape": [...]}`.  The
+  discriminator literal is spelled `groupings_attribute`, not
+  `group_attributes`; that spelling is normative.
 
 Groups have no spatial extent — they describe arbitrary partitions of
 the object set (cell types, brain regions, fascicle bundles, …).
@@ -411,8 +404,7 @@ row-numbered in a different chunk.
   of shape `(B,)`.  Row `object_id` holds that object's manifest blob;
   the array is addressed positionally, so a single-object read fetches
   one Zarr chunk.  `object_index/` itself is a group carrying the index
-  metadata.  (Before 0.8.1 this was a `data` + `offsets` byte-blob
-  pair, still recognised as the legacy layout when `layout` is absent.)
+  metadata.
 - **Chunking**: manifests are chunked in buckets of at most 16 384
   objects, which sets the read-amplification ceiling for a single-OID
   fetch.  The bucket is fixed when the array is created and cannot be
@@ -459,31 +451,7 @@ fragment_index` for the single chunk.  Multi-chunk stores must use
 the explicit standard convention (`object_index_convention =
 "standard"`, the default).
 
-## 7.7 Cross-Chunk Links
-
-*Merged into `links` in v0.9.*  There is no `cross_chunk_links` array.
-
-A link that crosses a chunk boundary is a record in
-`links/<delta>/<offsets>` ([§7.5](#75-vertex-links)) whose offsets are
-non-zero; an intra-chunk link is one whose offsets are all zero.  Both
-are the same record shape, in the same family, under the same policy —
-the offsets segment is the only thing that differs.
-
-The endpoint chunk is recovered from the cell coordinate plus the
-offsets segment, and each `vi_k` is local to that chunk, so the
-replacement stores no global vertex IDs at all and there is nothing to
-reconstruct.  See
-[§10.6](10-cross-chunk-linking.md#106-on-disk-layout-the-links-family)
-for the full layout and
-[§10.9](10-cross-chunk-linking.md#109-migration-to-v09) for why 0.8
-stores cannot be migrated in place.
-
-Consequently a store no longer advertises
-`partitioned_cross_chunk_links`; that capability token was retired in
-0.9.  `multiscale_links` survives, and now marks only the presence of
-`delta ≠ 0` arrays.
-
-## 7.8 Link Attributes
+## 7.7 Link Attributes
 
 - **Name**: `link_attributes`
 - **Path**: `<level>/link_attributes/<name>/<delta>/<offsets>`, one
@@ -504,36 +472,23 @@ Consequently a store no longer advertises
 - **Optional**: emitted only when the writer chose to carry per-link
   attributes; absent by default.
 
-## 7.9 Cross-Chunk Link Attributes
-
-*Merged into `link_attributes` in v0.9.*  There is no
-`cross_chunk_link_attributes` array.
-
-Attributes of a link that crosses a chunk boundary live in
-`link_attributes/<name>/<delta>/<offsets>` ([§7.8](#78-link-attributes))
-at the non-zero offsets segment, exactly as attributes of an
-intra-chunk link live at the all-zero one.  One attribute family
-mirrors the one link family, segment for segment and cell for cell.
-
-## 7.10 Object Attributes
+## 7.8 Object Attributes
 
 - **Name**: `object_attributes`
 - **Path**: `<level>/object_attributes/<name>` — a single dense array
-  per attribute.  (Before 0.8.1 this was a group wrapping a `data`
-  blob.)
+  per attribute.
 - **Payload**: dense per-object rows in object_id order, shape
   `(B,)` or `(B, C)`.  No fragment-indexing — the array is keyed by
   the same OID space as `object_index/`.  Rows are chunked at 65 536.
 - **Absence is in-band**: an object with no value for this attribute
   reads back as the array's `fill_value` — NaN for floats, the dtype
   minimum for signed integers, the dtype maximum for unsigned, the
-  empty string for text.  The sibling `present_mask` array used before
-  0.8.1 is gone.
+  empty string for text.
 - **`.zattrs`**: `{"zv_array": "object_attribute", "name": "<name>",
   "dtype": "<dtype>", "shape": [...], "fill_sentinel_meaning":
   "absent"}`, plus optional `channel_names`.
 
-## 7.11 Fragment Attributes
+## 7.9 Fragment Attributes
 
 - **Name**: `fragment_attributes`
 - **Path**: `<level>/fragment_attributes/<name>`, one cell per spatial

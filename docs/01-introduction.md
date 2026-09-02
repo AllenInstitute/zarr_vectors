@@ -103,7 +103,7 @@ OME-Zarr's multi-resolution approach is adapted for vector data:
 - **Zarr backend**: Both formats leverage Zarr's chunked storage
 - **Metadata standards**: OME-Zarr's metadata conventions (RFC 4, RFC 5) are followed for coordinate reference systems
 - **Extension model**: OME-Zarr's extensibility model influenced the design
-- **Pyramid chunk-size growth**: OME-Zarr scales image pyramids by shrinking voxel size at coarser levels (so the same chunk count covers a larger physical region).  ZV has no voxel concept, so it instead lets each pyramid level override `chunk_shape` directly (v0.7+); coarser levels can use larger chunks while staying nested in the level-0 grid.
+- **Pyramid chunk-size growth**: OME-Zarr scales image pyramids by shrinking voxel size at coarser levels (so the same chunk count covers a larger physical region).  ZV has no voxel concept, so it instead lets each pyramid level override `chunk_shape` directly; coarser levels can use larger chunks while staying nested in the level-0 grid.
 
 ### 1.4.3 Zarr Specification
 Zarr provides the storage foundation:
@@ -118,7 +118,7 @@ The Neuroglancer precomputed mesh format influenced multi-resolution mesh design
 - **Spatial chunking**: Concept of dividing meshes into spatial regions
 - **Draco compression**: Use of Draco for mesh compression
 
-The companion [precomputed annotation format](https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/annotations.md) covers points, lines, axis-aligned bounding boxes, and ellipsoids with per-annotation properties and per-segment relationships.  ZV expresses the same primitives via `geometry_types` + per-vertex / per-object attributes + groups; coarsening differs (per-object aggregation vs random-subsample-with-limit).  See Appendix L for the field-by-field mapping.
+The companion [precomputed annotation format](https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/annotations.md) covers points, lines, axis-aligned bounding boxes, and ellipsoids with per-annotation properties and per-segment relationships.  ZV expresses the same primitives via `geometry_types` + per-vertex / per-object attributes + groups; coarsening differs (per-object aggregation vs random-subsample-with-limit).  See Appendix K for the field-by-field mapping.
 
 ### 1.4.5 Traditional Formats (LAS, PLY, OBJ, STL)
 While ZV addresses limitations of traditional formats, it maintains conceptual compatibility:
@@ -166,13 +166,12 @@ This specification is organized as follows:
 - **Sections 9-12**: Advanced features—multi-resolution, cross-chunk linking, compression, and geometry types
 - **Section 13**: Conformance and validation—requirements for compliant implementations
 - **Section 14**: Examples—practical examples demonstrating format usage
-- **Section 15**: Appendices—reference material, schemas, algorithms, and migration guides
+- **Section 15**: Appendices—reference material, schemas, and algorithms
 
 **Reading Paths:**
 - **Quick Start**: Read Sections 1, 2, 4, and 14 (examples)
 - **Implementation**: Read Sections 1-8, 13, and relevant appendices
 - **Advanced Usage**: Read all sections, focusing on 9-12 for specific features
-- **Migration**: Read Sections 1-4, then Appendix G (Migration Guide)
 
 ## 1.8 Conventions
 

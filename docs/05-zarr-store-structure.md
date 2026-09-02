@@ -73,7 +73,7 @@ sit under each array's `c/` sub-tree at `c/<i>/<j>/<k>`):
 │           ├── zarr.json
 │           └── c/0[/0]
 ├── 1/                                 # optional coarser level
-│   ├── zarr.json                      # may override "chunk_shape" (v0.7)
+│   ├── zarr.json                      # may override "chunk_shape"
 │   ├── vertices/ …
 │   ├── links/
 │   │   ├── 0/                         # intra-level records at this level
@@ -84,16 +84,16 @@ sit under each array's `c/` sub-tree at `c/<i>/<j>/<k>`):
 └── N/
 ```
 
-There is **no separate cross-chunk family.**  A link that crosses a chunk
-boundary is a record in `links/<delta>/<offsets>/` whose offsets are
-non-zero; an intra-chunk link is one whose offsets are all zero.  See
+A link that crosses a chunk boundary is a record in
+`links/<delta>/<offsets>/` whose offsets are non-zero; an intra-chunk
+link is one whose offsets are all zero.  See
 [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-the-links-family).
 
 
 ## 5.2 Zarr Version Requirements
 
 - **Required Zarr version**: v3.
-- **Per-chunk array layout (v0.9)**: every per-spatial-chunk array —
+- **Per-chunk array layout**: every per-spatial-chunk array —
   `vertices`, `vertex_fragments`, `link_fragments`,
   `links/<delta>/<offsets>`, `vertex_attributes/<name>`,
   `fragment_attributes/<name>`,
@@ -119,8 +119,7 @@ non-zero; an intra-chunk link is one whose offsets are all zero.  See
 - **Non-spatial arrays**: `object_index/manifests` and `groups` are 1-D
   vlen-bytes arrays; `object_attributes/<name>` and
   `group_attributes/<name>` are dense numeric arrays.  Each is a single
-  Zarr array at its logical path — the `group`-with-a-`data`-child
-  pattern used before 0.8.1 is gone.
+  Zarr array at its logical path.
 - **No ragged-array codec required**: ragged structure inside a cell is
   expressed by the byte-blob layouts documented in
   [§7](07-core-arrays.md); Zarr handles storage and compression, not
@@ -186,10 +185,6 @@ implementation (`zarr_vectors.constants`):
 | `groups`                        | ragged array — object ids per group                          |
 | `group_attributes`              | per-(name) dense group-row arrays                            |
 
-Eleven names, down from thirteen: `cross_chunk_links` and
-`cross_chunk_link_attributes` were merged into `links` and
-`link_attributes` in 0.9.
-
 Two of these are **groups, not arrays**: `links/<delta>` and
 `link_attributes/<name>/<delta>` each hold one array per distinct
 relative-offset segment and carry the family-wide policy in their own
@@ -197,8 +192,7 @@ relative-offset segment and carry the family-wide policy in their own
 `manifests` array.
 
 Resolution level groups are named as bare integers (`0/`, `1/`, …,
-`N/`).  The legacy `resolution_0/` / `resolution_1/` prefix was
-dropped in 0.4.1 to align with OME-Zarr image-pyramid level naming.
+`N/`), matching OME-Zarr image-pyramid level naming.
 
 Metadata is carried under Zarr v3's standard `zarr.json` files; ZV
 extends each `zarr.json` with a namespaced sub-object:

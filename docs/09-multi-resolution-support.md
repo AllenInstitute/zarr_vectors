@@ -6,8 +6,7 @@ Each pyramid level lives under a bare-integer sub-group of the store
 root: `0/` is full resolution, `1/`, `2/`, … are progressively
 coarser.  Per-level metadata (`zarr.json["zarr_vectors_level"]`)
 carries the level index, vertex count, source level
-(`parent_level`), bin grid, and an optional `chunk_shape` override
-(v0.7).
+(`parent_level`), bin grid, and an optional `chunk_shape` override.
 
 Levels are independent Zarr groups — a reader that only needs the
 coarsest level fetches only that level's blobs.  Levels do not
@@ -50,8 +49,7 @@ A single coarse-bin metavertex may be referenced by more than one
 object's manifest — e.g. two streamlines that pass through the same
 coarse bin both reference the same fragment row.  Levels using this
 representation set `shared_fragments = true` and the store advertises
-the `CAP_SHARED_FRAGMENTS` token (renamed from the pre-0.6
-`shared_vertex_groups` token).
+the `CAP_SHARED_FRAGMENTS` token.
 
 ### Manual or none (`coarsening_method = "manual"` | `"none"`)
 
@@ -68,7 +66,7 @@ invariants).  `"none"` is used for level 0 itself.
   points and reduces straight-segment density.
 - **Streamlines / polylines**: point reduction along paths.
 
-## 9.3 Spatial Chunk Scaling (v0.7)
+## 9.3 Spatial Chunk Scaling
 
 `RootMetadata.chunk_shape` defines the **finest** (level-0) chunk
 grid.  Each pyramid level may override the chunk shape via
@@ -247,7 +245,7 @@ metavertex at level L+1 is reached by:
    `link_width = 1` records keyed by source fragment).
 2. Each record carries an endpoint `(c', v')` at level L+1 — the
    parent metavertex's chunk and row index in that chunk's
-   `vertices/<c'>` (which may be a different chunk under v0.7
+   `vertices/<c'>` (which may be a different chunk under
    chunk-shape growth: `c' = c // r`).
 3. Inverse (`-1`) traversal works analogously when
    `cross_level_storage = "explicit"`.
@@ -255,7 +253,7 @@ metavertex at level L+1 is reached by:
 For deeper traversal, compose step-by-step or read a pre-materialized
 deeper delta (`+2`, `+3`, …) up to `cross_level_depth`.
 
-### Interaction with v0.7 chunk-scale growth
+### Interaction with chunk-scale growth
 
 When `chunk_scale_factor > 1`, a level-N chunk physically covers `∏
 r_i` level-(N-1) chunks.  The natural source and target chunk

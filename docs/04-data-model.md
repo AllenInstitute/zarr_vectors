@@ -30,7 +30,7 @@ Zarr Store Root
 │   ├── groups                         # ragged: G groups → object id lists
 │   └── group_attributes/<name>        # dense (G,) or (G, C)
 ├── 1/                                 # coarser level (optional)
-│   ├── zarr.json                      # may override chunk_shape (v0.7)
+│   ├── zarr.json                      # may override chunk_shape
 │   ├── vertices/<i.j.k> …
 │   ├── links/0/<offsets>/<i.j.k>      # intra-level edges at this level
 │   ├── links/+1/<offsets>/<i.j.k>     # optional: fine→coarse pyramid edges
@@ -42,7 +42,7 @@ Zarr Store Root
 `links/<delta>` and `link_attributes/<name>/<delta>` are **groups**;
 their children are one array per distinct relative-offset segment.  A
 link that crosses a chunk boundary is a record whose offsets are
-non-zero — there is no separate cross-chunk family.
+non-zero; an intra-chunk link is one whose offsets are all zero.
 
 
 Each level carries:
@@ -54,7 +54,7 @@ Each level carries:
   `link_attributes/`, `object_index/`, `object_attributes/`, `groups`,
   `group_attributes/`.
 - **Per-level overrides**: each level may set its own `bin_shape`
-  (coarser bins for pyramid levels), `chunk_shape` (v0.7 — coarser
+  (coarser bins for pyramid levels), `chunk_shape` (coarser
   levels may use larger chunks), and a `parent_level` pointer.
 
 ## 4.2 Spatial Index Model
@@ -68,7 +68,7 @@ live in `RootMetadata`:
   `time → channel → custom → space`.  Number of space axes is
   `sid_ndim`, the number of *spatial index* dimensions.
 - **Chunk grid**: a level-0 default `chunk_shape` (positive float per
-  axis).  Pyramid levels may override `chunk_shape` (v0.7) provided
+  axis).  Pyramid levels may override `chunk_shape` provided
   the override is a positive integer multiple of the root along every
   axis — the level-0 chunk grid is the finest, and every coarser
   level nests cleanly within it.  Cross-level chunk-coord translation
@@ -135,8 +135,7 @@ numbering with any other chunk.
 
 Fragments may be referenced by more than one object.  When this is in
 use, the store advertises the `shared_fragments` capability token (see
-[§8.2](08-metadata.md#82-root-level-metadata)); the rename from the pre-0.6 `shared_vertex_groups` token reflects
-the move from contiguous vertex groups to row-level fragment sharing.
+[§8.2](08-metadata.md#82-root-level-metadata)).
 
 An empty manifest serializes as `B = 0` and represents an object that
 was dropped at this level (ID-preserving pyramids leave a hole rather
@@ -178,8 +177,7 @@ Links connect vertices.  Each level has zero or more `links/<delta>/`
 source endpoint and the others.  Each such group holds one array per
 distinct `<offsets>` segment — where the other endpoints sit relative
 to the record's source chunk.  Whether a record stays inside a chunk
-or crosses a seam is expressed by that segment, not by a separate
-array family.
+or crosses a seam is expressed by that segment.
 
 - `delta = 0` — same-level edges.  The all-zero offsets array
   (`links/0/0.0.0` in a 3-D store) holds intra-chunk records as a flat

@@ -120,29 +120,11 @@ Common access patterns and which arrays they touch:
 | Links leaving chunk `c` in direction `d` | `links/0/<offsets for d>` at cell `c - chunk_grid_origin` — one cell read |
 | All links incident on chunk `c`      | one cell read per offsets segment under `links/0/`; a single cell if the family uses `store = "duplicate"` |
 
-## Appendix G: Migration Guide
-
-There is no in-place migration utility across major ZV versions.  Each
-step changed the on-disk record layout in a way that breaks readers
-built for the previous version; stores must be **rewritten from
-source**.
-
-The 0.7 → 0.8 step was briefly an exception — it shipped a one-shot
-helper that repartitioned the monolithic cross-chunk-link blob into
-the sharded per-tuple layout.  **That helper is obsolete.**  0.9
-changed the physical form of every per-spatial-chunk array *and*
-re-keyed cross-chunk records from endpoint tuples to source chunks, so
-a 0.8 store has nothing at a path a 0.9 reader looks at, and the two
-families' cell sets do not correspond.  See
-[§10.9](10-cross-chunk-linking.md#109-migration-to-v09).
-
-See Appendix K below for the per-version summary.
-
-## Appendix H: Performance Considerations
+## Appendix G: Performance Considerations
 
 - **Chunk size**: larger chunks amortise per-chunk overhead at the
-  cost of larger minimum-read units.  v0.7 lets coarser pyramid
-  levels grow `chunk_shape` independently of level 0.
+  cost of larger minimum-read units.  Coarser pyramid levels may grow
+  `chunk_shape` independently of level 0.
 - **Bin grid**: enabling a per-chunk bin grid (`base_bin_shape`)
   lets point-cloud queries narrow to individual bins without
   decoding the whole chunk — important when `vertex_count_per_chunk
@@ -158,7 +140,7 @@ See Appendix K below for the per-version summary.
   — the same fragment index that partitions vertices partitions
   these attributes.
 
-## Appendix I: Extensibility
+## Appendix H: Extensibility
 
 - **Custom geometry types**: writers may add a new value to
   `geometry_types` outside the canonical set (`point_cloud`,
@@ -172,11 +154,11 @@ See Appendix K below for the per-version summary.
   `format_capabilities`.  Readers that don't recognize a token
   must either treat the corresponding feature as absent or refuse
   to open the store.
-- **Version evolution**: hard-break version bumps (0.4 → 0.5 → 0.6
-  → 0.7) are the project's only versioning mechanism; no shim
-  layer ships with the implementation.
+- **Version evolution**: a hard-break version bump is the project's
+  only versioning mechanism; no shim layer ships with the
+  implementation.  Appendix J records what each bump changed.
 
-## Appendix J: References
+## Appendix I: References
 
 - TRX format specification:
   <https://tee-ar-ex.github.io/trx-python/stable/trx_specifications.html>
@@ -187,16 +169,43 @@ See Appendix K below for the per-version summary.
   <https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/meshes.md>
 - Neuroglancer precomputed annotation format:
   <https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/annotations.md>
-  (see Appendix L for the mapping to zarr-vectors).
+  (see Appendix K for the mapping to zarr-vectors).
 
-## Appendix K: Change Log
+## Appendix J: Change Log
+
+*This appendix is the only place in the specification that describes
+prior versions of the format.  Sections 1-14 and the other appendices
+describe the current version and nothing else.*
 
 ZV is versioned per-feature, not per-release: every entry below
 describes a breaking on-disk change made under a single version bump.
-Each major version is a hard break — rewrite stores from source
-between versions.  The 0.7 → 0.8 step once shipped an in-place helper;
-0.9 obsoleted it (see [§10.9](10-cross-chunk-linking.md#109-migration-to-v09)),
-so there is now no version pair with a migration path.
+
+### Migration
+
+**There is no in-place migration utility between any two ZV versions.**
+Every bump changed the on-disk record layout in a way that breaks
+readers built for the previous version; stores must be **rewritten from
+source**.
+
+The 0.7 → 0.8 step was briefly an exception — it shipped a one-shot
+helper that repartitioned the monolithic cross-chunk-link blob into the
+sharded per-tuple layout.  **That helper is obsolete**, and 0.8 → 0.9
+has no replacement, because two independent breaks compose across it:
+
+1. Every per-spatial-chunk array changed physical form — from a group
+   of single-chunk sub-arrays, one per spatial chunk, to a single
+   vlen-bytes array over the chunk grid
+   ([§5.2](05-zarr-store-structure.md#52-zarr-version-requirements)).
+   Nothing in a 0.8 store sits at a path a 0.9 reader looks at.
+2. Cross-chunk records were keyed by the canonical-sorted tuple of
+   *endpoint* chunks, and are now keyed by the *source* chunk with the
+   relationship carried in the path.  Re-deriving a source chunk from a
+   sorted tuple is only possible where the record's `perm_idx`
+   survived, and the two families' cell sets do not correspond.
+
+A reader MUST reject a store it cannot identify rather than read it on
+a best-effort basis
+([§13.2](13-conformance-and-validation.md#132-validation-rules)).
 
 ### Version-at-a-glance
 
@@ -265,8 +274,7 @@ Tokens are open-set; readers must tolerate unknown values.
   present".  See
   [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-the-links-family).
 
-  Migration: **rewrite from source**; the 0.7 → 0.8 helper does not
-  apply ([§10.9](10-cross-chunk-linking.md#109-migration-to-v09)).
+  Migration: **rewrite from source** (see *Migration* above).
 
 - **0.8.1** — flat single-array layout for the dense and ragged
   arrays.  Removes the `group`-with-a-`data`-child pattern used by
@@ -306,11 +314,11 @@ Tokens are open-set; readers must tolerate unknown values.
   level — per-cell counts are derivable from cell byte length
   (`len(bytes) / (9 * link_width)`).  Migration: **in-place helper**
   that regroups records by their sorted unique
-  chunks, rewrites the leaves, and bumps `zv_version` —
-  see [§10.9](10-cross-chunk-linking.md#109-migration-to-v09).
+  chunks, rewrites the leaves, and bumps `zv_version`.  That helper
+  is obsolete — see *Migration* above.
 
 - **0.7.0** — per-level `chunk_shape` override on `LevelMetadata`
-  ([§6.6](06-spatial-indexing.md#66-per-level-chunk-shape-v07)).
+  ([§6.6](06-spatial-indexing.md#66-per-level-chunk-shape)).
   `RootMetadata.chunk_shape` remains the level-0 default; pyramid
   levels may carry a positive-integer-multiple chunk-shape override
   so coarser levels can grow chunks the way OME-Zarr image pyramids
@@ -371,7 +379,7 @@ Tokens are open-set; readers must tolerate unknown values.
   New `multiscale_links` capability token marks stores with any
   `delta ≠ 0` array.  Migration: rewrite.
 
-## Appendix L: Mapping from Neuroglancer Precomputed Annotations
+## Appendix K: Mapping from Neuroglancer Precomputed Annotations
 
 The [Neuroglancer precomputed annotation format](https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/annotations.md)
 stores small geometric primitives — points, lines, axis-aligned
@@ -382,7 +390,7 @@ narrower geometry semantics and a different multi-resolution model.
 This appendix maps the two layouts so authors can pick the right
 target and converters can translate between them.
 
-### L.1 Conceptual mapping
+### K.1 Conceptual mapping
 
 | Neuroglancer Precomputed Annotations          | Zarr-vectors equivalent                                      |
 |-----------------------------------------------|--------------------------------------------------------------|
@@ -393,12 +401,12 @@ target and converters can translate between them.
 | `relationships[]` (per-segment links)         | `groups` + `group_attributes/<name>` (groups keyed by segment id) |
 | `by_id/` (annotation ID → record)             | `object_index/manifests` (manifest keyed by dense `[0, B)` OID)   |
 | `spatial/<level>/` (multi-res grid + random subsample) | Pyramid levels `0/`, `1/`, … with per-object coarsening + `cross_level_storage` for fine→coarse mapping |
-| `spatial[level].grid_shape` × `chunk_size`    | Per-level effective `chunk_shape` (root + optional v0.7 `LevelMetadata.chunk_shape` override) |
+| `spatial[level].grid_shape` × `chunk_size`    | Per-level effective `chunk_shape` (root + optional `LevelMetadata.chunk_shape` override) |
 | `spatial[level].limit` (max annotations / cell) | Implicit via vertex count / bin_shape; pyramid coarsening controlled by `reduction_factor` and `coarsening_method` |
 | Sharded vs unsharded `by_id/` and `spatial/`  | Zarr v3 chunk-key encoding handles both transparently; sharding is a backend concern, not a schema choice |
 | Random subsampling between levels             | `coarsening_method = "per_object"` with `object_sparsity ∈ (0, 1]` and `preserves_object_ids = true` |
 
-### L.2 Mapping the four geometry primitives
+### K.2 Mapping the four geometry primitives
 
 Precomputed annotations are zero-dimensional primitives, each carrying
 a fixed positional record.  Zarr-vectors expresses them via the
@@ -417,7 +425,7 @@ geometry in `geometry_types`); the precomputed format restricts a
 single store to one `annotation_type` and would require co-locating
 several stores to mix kinds.
 
-### L.3 Properties and relationships
+### K.3 Properties and relationships
 
 **Per-annotation properties** in precomputed correspond directly to
 per-vertex (or per-object) attributes:
@@ -449,7 +457,7 @@ map onto zarr-vectors **groups**:
   same operation that powers "show all annotations on segment X" in
   precomputed.
 
-### L.4 The spatial index
+### K.4 The spatial index
 
 Both formats use a multi-resolution spatial grid to keep query cost
 bounded, but the *selection rule* differs:
@@ -460,7 +468,7 @@ bounded, but the *selection rule* differs:
   controlled by `grid_shape` × `chunk_size`, anchored at
   `lower_bound`.  Levels coarsen by integer division of cells.
 - **Zarr-vectors**: each level has a fixed `bin_shape` (and
-  optionally an overridden `chunk_shape`, v0.7).  Coarsening is
+  optionally an overridden `chunk_shape`).  Coarsening is
   per-object: each surviving object's vertices are aggregated into
   metavertices at the coarser bin grid.  `object_sparsity ∈ (0, 1]`
   in level metadata records what fraction of objects survived.
@@ -470,7 +478,7 @@ Equivalents:
 | Concept                            | Precomputed                       | Zarr-vectors                                       |
 |------------------------------------|-----------------------------------|----------------------------------------------------|
 | Grid cells per axis at level L     | `spatial[L].grid_shape`           | `ceil((bounds_max - bounds_min) / chunk_shape_L)`  |
-| Cell size at level L               | `spatial[L].chunk_size`           | `RootMetadata.chunk_shape` × per-level `chunk_scale_factor` (v0.7) |
+| Cell size at level L               | `spatial[L].chunk_size`           | `RootMetadata.chunk_shape` × per-level `chunk_scale_factor` |
 | LOD selection knob                 | `spatial[L].limit`                | `reduction_factor` + per-level `object_sparsity`   |
 | Cross-level identity               | annotation ID is shared across levels | OID-preserving pyramid (`preserves_object_ids = true`) |
 | Drillable parent→child mapping     | implicit (random subsample)       | optional `links/<delta>/<offsets>` arrays ([§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional))   |
@@ -483,11 +491,11 @@ sampling for free; the zarr-vectors model is more general (handles
 extended objects, not just points) at the cost of an explicit
 coarsener.
 
-### L.5 Practical conversion notes
+### K.5 Practical conversion notes
 
 - **Single annotation type → single zarr-vectors store** is a
   straightforward 1:1 transcode.  Pick the geometry mapping from
-  [§L.2](#l2-mapping-the-four-geometry-primitives); emit one fragment per annotation; populate `object_index/`
+  [§K.2](#k2-mapping-the-four-geometry-primitives); emit one fragment per annotation; populate `object_index/`
   in dense OID order from the original `by_id` listing.
 - **Properties** transcode field-for-field; preserve the original
   uint8 / int8 / ... types rather than upcasting.
@@ -505,7 +513,7 @@ coarsener.
   zarr-vectors writes per-chunk blobs into a Zarr v3 store regardless
   of the backend's sharding.
 
-### L.6 What zarr-vectors adds over precomputed annotations
+### K.6 What zarr-vectors adds over precomputed annotations
 
 - **Connected geometries** (polylines with branches, skeletons,
   meshes) live in the same store, not just zero-dimensional
@@ -526,7 +534,7 @@ coarsener.
   default, but mesh decimation and streamline point-reduction slot
   into the same level structure.
 
-### L.7 What precomputed annotations preserve that zarr-vectors does not (yet)
+### K.7 What precomputed annotations preserve that zarr-vectors does not (yet)
 
 - **Sharded back-end** as a first-class schema concern.  Zarr-vectors
   delegates sharding to the underlying Zarr v3 store; it does not

@@ -10,7 +10,7 @@ level corresponds to one submodule.
 |-------|--------------------|-------------------------------------------------------------------------------------------------|
 | 1     | `structure.py`     | Required filesystem layout: `zarr.json` parses, level groups exist, per-array groups are wired. |
 | 2     | `metadata.py`      | Root and per-level metadata schema (LinkML); conventions / capability tokens are recognized.   |
-| 3     | `consistency.py`   | Cross-array internal consistency: VG counts ≤ bins-per-chunk, manifests reference live chunks/fragments, every CCL `kK` cell coord's K chunk segments are lex-sorted, every record's `ci` values cover `{0..K-1}` and address existing chunks, per-cell attribute parity holds, per-level vertex counts agree with `arrays_present`. |
+| 3     | `consistency.py`   | Cross-array internal consistency: fragment counts ≤ bins-per-chunk, manifests reference live chunks/fragments, every link array's name parses as a valid offsets segment, every `vi_k` addresses an existing vertex in chunk `src + o_k`, per-cell attribute parity holds, per-level vertex counts agree with `arrays_present`. |
 | 4     | `conformance.py`   | Convention compliance: `links_convention` matches geometry, bin-bounds spot checks for point clouds, per-geometry link-width invariants.                                                              |
 | 5     | `conformance.py`   | Multi-resolution coherence across the pyramid: nested `chunk_shape`, `bin_ratio` consistency, OID-preservation invariants, `cross_level_storage`-driven array presence.                                |
 
@@ -35,10 +35,12 @@ A representative (non-exhaustive) sample:
   enumerations; `format_capabilities` tokens are recognized
   (`fragment_index`, `shared_fragments`, `preserved_object_ids`,
   `multiscale_links`).  `object_index`'s `layout` equals
-  `"vlen_manifests_v1"`.  A store carrying the retired
-  `partitioned_cross_chunk_links` token, a `cross_chunk_links/` group,
-  or `layout = "sharded_v1"` is a pre-0.9 store and MUST be rejected
-  rather than partially read ([§10.9](10-cross-chunk-linking.md#109-migration-to-v09)).
+  `"vlen_manifests_v1"`.  A store whose `layout` discriminator, array
+  names, or `format_capabilities` tokens are not among those defined
+  here MUST be **rejected outright** rather than partially read: an
+  unrecognized discriminator means the store was written to a contract
+  this document does not describe, and reading it on a best-effort
+  basis yields plausible wrong answers instead of an error.
 - **Consistency**: every `vertex_fragments` cell decodes to a
   `FragmentIndex` whose ranges land within the row bounds of the
   `vertices` cell at the same coordinate; manifest blocks reference
@@ -82,9 +84,7 @@ A representative (non-exhaustive) sample:
   same `multiscales` block an OME-Zarr image pyramid would, so
   generic NGFF tools can at least enumerate the levels and read
   units.
-- **Zarr** — only Zarr v3 is supported.  Earlier ZV versions
-  (pre-0.4) targeted Zarr v2; those stores are not readable by
-  current implementations.
+- **Zarr** — only Zarr v3 is supported.
 - **TRX** — when `sid_ndim` collapses to 1 and the store has a single
   spatial chunk, the layout aligns conceptually with TRX (positions
   + offsets + per-vertex / per-streamline / per-group data); see

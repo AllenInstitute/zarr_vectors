@@ -113,13 +113,13 @@ mouse_brain_nuclei.zarr/
   nucleus object IDs.
 - **Group attributes**: `region_name` (string per group).
 - **Multi-resolution**: per-object pyramid with coarser `bin_shape`
-  at each level; coarse levels may grow `chunk_shape` (v0.7) to
+  at each level; coarse levels may grow `chunk_shape` to
   amortise overhead.  `+1` / `-1` cross-pyramid-level link arrays
   drill from fine to coarse — see [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional).
 
 ---
 
-## 14.2 Mesh with Multi-Resolution (v0.7 chunk-scale growth)
+## 14.2 Mesh with Multi-Resolution (chunk-scale growth)
 
 ![Triangle mesh at two resolution levels](images/mesh.png)
 
@@ -187,7 +187,7 @@ drosophila_central_complex_mesh.zarr/
 
 `bin_shape` and `bin_ratio` do **not** appear here: they live in this
 level's NGFF `coordinateTransformations` entry as `translation × 2` and
-`scale` respectively (see [§9.3](09-multi-resolution-support.md#93-spatial-chunk-scaling-v07)).
+`scale` respectively (see [§9.3](09-multi-resolution-support.md#93-spatial-chunk-scaling)).
 `arrays_present` lists family names only.
 
 **Notes**:
@@ -202,7 +202,7 @@ level's NGFF `coordinateTransformations` entry as `translation × 2` and
 - `links/0/0.0.+1_0.0.+1/` and friends: faces whose vertices live in
   distinct chunks.  Same family, same record shape — only the offsets
   segment differs.
-- **v0.7 chunk-scale growth**: level 1's chunks are `2³` × coarser
+- **Chunk-scale growth**: level 1's chunks are `2³` × coarser
   bin-shape than level 0's, but the grids nest exactly: a level-0
   chunk `(2,3,4)` lives inside the level-1 chunk `(1,1,2)`.
 - `links/+1/`: optional fine→coarse mapping per
@@ -608,7 +608,7 @@ dti_tracts.zarr/
   `directed = true` the along-path order is preserved and no
   permutation index is stored, so a record is two chunk-local vertex
   indices and nothing else.
-- **v0.7 chunk-scale growth**: level 1's `chunk_shape` is 2× root
+- **Chunk-scale growth**: level 1's `chunk_shape` is 2× root
   per axis; per-chunk fragment counts stay bounded as the pyramid
   decimates.
 - **Implicit cross-level storage**: only the `links/+1/` arrays are
@@ -655,12 +655,12 @@ same store (many workers tracing neurons in different tiles).
 | Example                  | sid_ndim | Objects               | links_convention             | Vertex attributes      | Groups        |
 |--------------------------|----------|-----------------------|------------------------------|------------------------|---------------|
 | 14.1 Mouse nuclei        | 3 (XYZ)  | nuclei                | implicit_sequential          | volume                 | region_name   |
-| 14.2 Mesh pyramid (v0.7) | 3 (XYZ)  | mesh fragments        | explicit (link_width = 3)    | —                      | —             |
+| 14.2 Mesh pyramid        | 3 (XYZ)  | mesh fragments        | explicit (link_width = 3)    | —                      | —             |
 | 14.3 Skeletons           | 3 (XYZ)  | neurons               | implicit_sequential_with_branches | vertex_type, radius | —             |
 | 14.4 Polylines           | 2 (XY)   | vessels               | implicit_sequential          | radius, vessel_type    | —             |
 | 14.5 Tracks              | 4 (XYZT) | tracks                | implicit_sequential          | —                      | —             |
 | 14.6 Multiplexed FISH    | 2 (XY)   | cells                 | implicit_sequential          | gene_expression, cell_type | cell_type_name, super_type |
 | 14.7 mFISH spots → cells | 3 (XYZ)  | cells (many spots)    | implicit_sequential          | gene_id, intensity, round  | —         |
 | 14.8 Simple DTI (TRX)    | 3 (XYZ)  | streamlines (single chunk) | implicit_sequential     | fa, color (obj: algo, clusters) | mean_fa, volume |
-| 14.9 DTI streamlines (v0.7) | 3 (XYZ) | streamlines          | implicit_sequential          | — (obj: termination)   | tract_name    |
+| 14.9 DTI streamlines     | 3 (XYZ)  | streamlines           | implicit_sequential          | — (obj: termination)   | tract_name    |
 | 14.10 Distributed write  | 3 (XYZ)  | (same as 14.3)        | implicit_sequential_with_branches | —                  | —             |

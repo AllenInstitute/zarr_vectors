@@ -19,24 +19,19 @@ schema treats uniformly under one array family:
 - **Cross-pyramid-level links** between resolution levels
   (`delta ≠ 0`).  Endpoints at the source level paired with endpoints
   at `source + delta`.  When the coarse level also grows
-  `chunk_shape` (v0.7), the source-side chunk coord and target-side
-  chunk coord differ for the same physical region.
+  `chunk_shape`, the source-side chunk coord and target-side chunk
+  coord differ for the same physical region.
 
 Both kinds live under `links/<delta>/<offsets>/` with identical record
 structure; the `<delta>` path segment declares which case applies.
 
-Since **v0.9** there is no separate cross-chunk array family.
-Connectivity is one family, and **an intra-chunk link is simply a link
-whose relative offsets are all zero** — see
-[§10.6](#106-on-disk-layout-the-links-family).  The motivation is that
-the two families had drifted into different physical forms for what is
-one relationship: intra-chunk links were per-chunk arrays over the
-chunk grid, while cross-chunk records were cells keyed by a
-canonical-sorted tuple of endpoint chunks, which sharded differently,
-enumerated differently, and needed their own attribute family and their
-own validation rules.  Factoring the endpoint relationship into the
-*path* instead of the cell coordinate makes every link array an
-ordinary chunk-grid array, and a record no longer names a chunk at all.
+Connectivity is **one** array family, and **an intra-chunk link is
+simply a link whose relative offsets are all zero** — see
+[§10.6](#106-on-disk-layout-the-links-family).  Factoring the
+relationship between endpoints into the *path* rather than into the
+cell coordinate is what makes every link array an ordinary chunk-grid
+array: it shards, enumerates and validates exactly like `vertices`
+does, and a record never names a chunk at all.
 
 ## 10.2 Strategy 1: Boundary Deduplication
 
@@ -62,9 +57,9 @@ ordinary chunk-grid array, and a record no longer names a chunk at all.
   endpoints sit relative to that source (see
   [§10.6](#106-on-disk-layout-the-links-family)).
 - **Setting**: `cross_chunk_strategy = "explicit_links"` (the
-  default).  The strategy tokens are semantic — they say how a writer
-  reconciles geometry straddling a boundary — and outlived the
-  `cross_chunk_links` path they were named for.
+  default).  The strategy tokens are semantic: they say how a writer
+  reconciles geometry that straddles a boundary, not where the records
+  are stored.
 - **Record format**: see [§7.5](07-core-arrays.md#75-vertex-links).
   Each record carries `link_width` chunk-local vertex indices, one per
   endpoint.  `link_width = 2` is the generic edge; `link_width = 3` is
@@ -95,7 +90,7 @@ Picking guidance:
 | Skeleton with strict integer voxel-coordinate vertices   | either; deduplication is simplest |
 | Streamline / polyline with float vertices                | `explicit_links`        |
 | Mesh with shared rim triangles                           | `explicit_links` (link_width=3) |
-| Any v0.7+ pyramid with chunk-scale growth                | `explicit_links` (required for cross-pyramid records) |
+| Any pyramid with chunk-scale growth                      | `explicit_links` (required for cross-pyramid records) |
 
 ## 10.5 Object Index for Cross-Chunk Objects
 
@@ -113,15 +108,14 @@ object, a reader:
    those chunks to recover edges bridging them.
 
 The manifest blocks do NOT themselves carry cross-chunk *edges* — they
-carry chunk + fragment references.  Manifests have not referenced links
-at all since 0.6, and the 0.9 merge left them untouched.
+carry chunk + fragment references.  A manifest references vertex
+fragments only.
 
 ## 10.6 On-Disk Layout: The Links Family
 
-*Rewritten in v0.9.*  Connectivity is **one** array family.  There is no
-`cross_chunk_links/` group and no `cross_chunk_link_attributes/` group:
-an intra-chunk link is simply a link whose relative offsets are all
-zero.
+Connectivity is **one** array family: `links/<delta>/<offsets>/`, with
+`link_attributes/<name>/<delta>/<offsets>/` mirroring it.  An
+intra-chunk link is a link whose relative offsets are all zero.
 
 ### 10.6.1 Array tree
 
@@ -188,10 +182,10 @@ Two encodings, selected by one condition:
 | `delta == 0` **and** offsets all zero | flat concatenated rows | `link_fragments/<chunk>` |
 | otherwise | inline self-describing ragged blob | none |
 
-The intra-chunk case is byte-identical to the pre-0.9 `links/<delta>/`
-payload: a flat row block whose per-fragment partition lives in the
-sibling `link_fragments` array.  Every other array — any non-zero
-offset, any `delta ≠ 0` — carries its own ragged framing inline
+The intra-chunk case is a flat row block whose per-fragment partition
+lives in the sibling `link_fragments` array.  Every other array — any
+non-zero offset, any `delta ≠ 0` — carries its own ragged framing
+inline
 (`int64 K`, then `int64 offsets[K]`, then the rows) and has no sidecar.
 
 A row is `link_width` integer columns, or `1 + link_width` columns when
@@ -355,12 +349,8 @@ written to; the other endpoints are read off the path.
 | Triangle across two seams, `L=3` | `links/0/0.0.+1_0.+1.0` | `(4,2,7)` | `[0, 5, 3, 7]` | vertex 5 in `(4,2,7)`, vertex 3 in `(4,2,8)`, vertex 7 in `(4,3,7)` |
 | Parent reference, `L=1` | `links/+1/self` | `(4,2,7)` | `[9]` | vertex 9 of the anchored chunk one level coarser |
 
-The whole of the pre-0.9 cell-index machinery — the `kK` arrays, the
-canonical-sorted endpoint-chunk tuple in the cell coordinate, the
-per-endpoint `ci` chunk-index byte, the `layout = "sharded_v1"`
-discriminator — is gone.  Chunk identity now comes from the cell
-coordinate plus the offsets segment, and nothing in the record names a
-chunk.
+Chunk identity comes from the cell coordinate plus the offsets segment;
+nothing in the record names a chunk.
 
 ### 10.6.10 Reader access patterns
 
@@ -423,7 +413,7 @@ o      = c_trg - anchor            # decode:  c_trg = anchor + o
 ```
 
 where `r_src` and `r_trg` are the two levels' chunk-shape multipliers
-relative to root (see [§9.3](09-multi-resolution-support.md#93-spatial-chunk-scaling-v07)).
+relative to root (see [§9.3](09-multi-resolution-support.md#93-spatial-chunk-scaling)).
 This matters whenever the coarse level grows `chunk_shape`: without
 re-anchoring, two source chunks in the same geometric relationship to
 their parent produce different raw differences, and the same physical
@@ -450,27 +440,3 @@ endpoints.  A record whose endpoints sit at *different* levels — a
 triangle at levels `(N, N, N+1)`, say — cannot be expressed.  Such a
 record must be decomposed, or the geometry rewritten so that all
 non-source endpoints share one level.
-
-## 10.9 Migration to v0.9
-
-**There is no in-place migration helper, and none is possible.**  A
-0.8.x store is unreadable by a 0.9 reader and must be **rewritten from
-source**.
-
-Two independent breaks compose here:
-
-1. Every per-spatial-chunk array changed physical form — from a group
-   of single-chunk sub-arrays, one per spatial chunk, to a single
-   vlen-bytes array over the chunk grid
-   ([§5.2](05-zarr-store-structure.md#52-zarr-version-requirements)).
-   Nothing in a 0.8 store is at a path a 0.9 reader looks at.
-2. Cross-chunk records were keyed by the canonical-sorted tuple of
-   *endpoint* chunks, and are now keyed by the *source* chunk with the
-   relationship in the path.  Re-deriving a source chunk from a sorted
-   tuple is only possible for records whose `perm_idx` survived, and
-   the two families' cell sets do not correspond.
-
-The 0.7 → 0.8 in-place helper — which regrouped records by sorted
-unique chunks, rewrote the leaves and stamped `layout = "sharded_v1"` —
-was specific to that transition and does not apply.  Writers should
-re-run their ingest against a 0.9 reference implementation.

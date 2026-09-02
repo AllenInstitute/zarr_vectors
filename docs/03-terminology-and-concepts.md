@@ -15,10 +15,6 @@
   explicit list of row indices.  The unit of pyramid coarsening,
   object membership, and (when shared) row re-use.  Carried in
   `vertex_fragments/<chunk>` in the fragment-index byte layout.
-- **Vertex Group** *(deprecated)*: pre-0.6 term for what the current
-  schema calls a **fragment**.  Some on-disk discriminator literals
-  (`"groupings_attribute"`) retain the legacy spelling for
-  back-compatibility; prose uses **fragment** uniformly.
 - **Fragment Index**: The per-chunk byte layout that describes the
   F fragments inside one chunk's `vertex_fragments/<chunk>` (or
   `link_fragments/<chunk>`).  Header + range bitmap + range table +
@@ -36,7 +32,7 @@
 - **Channel Dimension**: Per-vertex (or per-object, per-group)
   attribute axis carrying multi-channel data (gene expression,
   color, source/sink region pair, …).
-- **Per-Level chunk_shape (v0.7)**: Each pyramid level may override
+- **Per-Level chunk_shape**: Each pyramid level may override
   the root `chunk_shape` by a positive integer multiple per axis.
   Coarser levels can grow chunks the way OME-Zarr image pyramids do
   via voxel-size scaling.
@@ -73,7 +69,7 @@
   is how a chunk is named in metadata such as `nonempty_chunks`.
 - **chunk_scale_factor**: The per-axis integer multiple of root
   `chunk_shape` carried by a per-level chunk_shape override
-  (v0.7+).  Exposed by `chunk_scale_factor(root_meta, level_meta)`.
+  Exposed by `chunk_scale_factor(root_meta, level_meta)`.
 - **Metadata**: Structured information stored in Zarr v3 `zarr.json`
   files under namespaced keys (`zarr_vectors`, `zarr_vectors_level`,
   `zv_array`).
@@ -89,9 +85,9 @@
 - **Cross-Chunk Link**: A record in `links/<delta>/<offsets>/` whose
   offsets segment is **non-zero** — that is, whose endpoints live in
   different chunks (and, when `delta ≠ 0`, at different pyramid
-  levels).  Since 0.9 this is not a separate kind of object: an
-  intra-chunk link is a record in the same family whose offsets are
-  all zero.  Each record is `L = link_width` chunk-local vertex
+  levels).  This is not a separate kind of object: an intra-chunk
+  link is a record in the same family whose offsets are all zero.
+  Each record is `L = link_width` chunk-local vertex
   indices; the chunk each endpoint lives in is recovered from the
   cell coordinate plus the offsets segment.  See [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-the-links-family).
 - **Source Chunk**: The chunk whose cell holds a link record.  Offsets
@@ -130,16 +126,12 @@
 
 Optional features advertised in `format_capabilities` (see [§8.2](08-metadata.md#82-root-level-metadata)):
 
-- **`fragment_index`** — store uses the v0.6 fragment-index encoding
-  (mandatory for 0.6+).
+- **`fragment_index`** — store uses the fragment-index encoding
+  (mandatory).
 - **`shared_fragments`** — per-chunk fragments may be referenced by
-  multiple objects' manifests (renamed from pre-0.6
-  `shared_vertex_groups`).
+  multiple objects' manifests.
 - **`preserved_object_ids`** — at least one pyramid level inherits
   the parent OID space; dropped objects retain empty manifest slots.
 - **`multiscale_links`** — store contains cross-pyramid-level link
-  arrays (`delta ≠ 0`).  Since 0.9 the token says nothing about
-  chunk-spanning records, because those are ordinary links.
-
-`partitioned_cross_chunk_links` was retired in 0.9 together with the
-array family it described.
+  arrays (`delta ≠ 0`).  It says nothing about chunk-spanning records,
+  which are ordinary links.

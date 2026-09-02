@@ -34,14 +34,12 @@
   `links/0/0.0.+1_0.0.+1` for a face straddling the `+z` seam, or
   `links/0/0.0.+1_0.+1.0` for one spanning three chunks.  A face
   carries `link_width - 1 = 2` offsets joined by `_`, so a mesh's
-  offsets segments are twice as long as an edge's.  (This replaced the
-  dropped `cross_chunk_faces/` array in 0.5 and the separate
-  cross-chunk family in 0.9.)
+  offsets segments are twice as long as an edge's.
 - **Winding order**: set `directed = true` on the family when face
   vertex order carries orientation, so no canonical sort is applied
   and no permutation index is stored.
 - **Multi-Resolution**: edge-collapse decimation or per-object
-  metavertex aggregation; v0.7 chunk-scale growth keeps coarse-level
+  metavertex aggregation; chunk-scale growth keeps coarse-level
   chunk counts tractable.
 
 ## 12.3 Skeletons

@@ -20,7 +20,7 @@ the level-0 chunk shape:
 - **Reference system**: optional OME-Zarr RFC 4 / 5 `crs` dict, with
   per-axis UDUNITS-2 units on the NGFF axes.
 
-Per-level overrides (v0.7) are allowed and described in [§6.6](#66-per-level-chunk-shape-v07).
+Per-level overrides are allowed and described in [§6.6](#66-per-level-chunk-shape).
 
 ## 6.2 Spatial Chunk Addressing
 
@@ -49,8 +49,8 @@ error.
 ### Chunk coordinate → array cell
 
 A chunk coordinate is not directly an index into a per-chunk array.
-Since 0.9 each such array is one array over the level's chunk grid, and
-the chunk at absolute coord `c` occupies
+Each such array is one array over the level's chunk grid, and the
+chunk at absolute coord `c` occupies
 
 ```text
 cell_i   = chunk_coord_i - origin_i
@@ -120,7 +120,7 @@ ordering, etc.) are out of scope for this snapshot but would be
 expressed by replacing the chunk-key encoding while keeping the
 per-chunk byte payloads intact.
 
-## 6.6 Per-Level Chunk Shape (v0.7)
+## 6.6 Per-Level Chunk Shape
 
 `RootMetadata.chunk_shape` defines the **level-0** grid.  Each pyramid
 level may carry its own `chunk_shape` in
