@@ -108,7 +108,7 @@ OME-Zarr's multi-resolution approach is adapted for vector data:
 ### 1.4.3 Zarr Specification
 Zarr provides the storage foundation:
 - **Chunked arrays**: Zarr's efficient chunked storage enables spatial indexing
-- **Ragged objects**: per-chunk byte payloads (vertices, fragment-index, links, manifests) carry their own record framing inside Zarr v3 1-D `uint8` arrays — no use of Zarr's variable-length-chunk feature
+- **Ragged objects**: per-chunk byte payloads (vertices, fragment-index, links, manifests) carry their own record framing inside the cells of Zarr v3 vlen-bytes arrays — Zarr stores the bytes, ZV frames the records
 - **Store abstraction**: Zarr's store interface enables cloud-native storage
 - **Metadata**: Zarr v3's `zarr.json` files carry format metadata under namespaced keys (`zarr_vectors`, `zarr_vectors_level`, `zv_array`)
 

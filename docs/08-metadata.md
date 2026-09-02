@@ -11,8 +11,8 @@ A ZV store carries metadata at five levels:
    `zarr.json["zarr_vectors_level"]`.
 3. **Array metadata** — under each array's per-array `zarr.json`, with
    a `"zv_array"` discriminator and a small shape/dtype block.
-4. **Object metadata** — values in `object_attributes/<name>/data`.
-5. **Group metadata** — values in `group_attributes/<name>/data`.
+4. **Object metadata** — values in `object_attributes/<name>`.
+5. **Group metadata** — values in `group_attributes/<name>`.
 
 The canonical schema is `schema/zarr_vectors.linkml.yaml` in the
 zarr-vectors-py package; this chapter mirrors it.
@@ -54,9 +54,17 @@ match the `CAP_*` constants in `zarr_vectors.constants`:
 |--------------------------|---------|
 | `"preserved_object_ids"` | At least one level was written with ID-preserving sparsification (`zarr_vectors_level.preserves_object_ids = true`). |
 | `"shared_fragments"`     | At least one level stores per-chunk fragments referenced by multiple objects' manifests.  Successor to the pre-0.6 `shared_vertex_groups` token. |
-| `"fragment_index"`       | The store uses the v0.6 fragment-index encoding for `vertex_fragments/` and `link_fragments/`.  Mandatory for 0.6+ stores. |
-| `"multiscale_links"`     | The store uses the `<delta>` sub-folder layout for `links/`, `cross_chunk_links/`, `link_attributes/`, and `cross_chunk_link_attributes/` and may contain cross-pyramid-level edges.  Absent on stores with `cross_level_storage = "none"` *and* no other `delta ≠ 0` arrays. |
-| `"partitioned_cross_chunk_links"` | The store uses the v0.8 sharded cross-chunk-link layout (kN array cells keyed by sorted unique chunks; `9 * link_width` bytes per record; `layout = "sharded_v1"` stamped on every `cross_chunk_links/<delta>/` group).  Coupled with `"multiscale_links"`: any store with a `cross_chunk_links/<delta>/` group MUST carry both tokens.  Stores carrying `"multiscale_links"` without `"partitioned_cross_chunk_links"` are v0.7-era monolithic-blob stores; v0.8 readers fail clearly until the store is migrated ([§10.9](10-cross-chunk-linking.md#109-migration-from-v07)). |
+| `"fragment_index"`       | The store uses the v0.6 fragment-index encoding for `vertex_fragments` and `link_fragments`.  Mandatory for 0.6+ stores. |
+| `"multiscale_links"`     | The store contains cross-pyramid-level link arrays (`delta ≠ 0`) under `links/<delta>/<offsets>/` and `link_attributes/<name>/<delta>/<offsets>/`.  Absent on stores with `cross_level_storage = "none"` *and* no other `delta ≠ 0` arrays. |
+
+Four tokens, down from five.  **`partitioned_cross_chunk_links` was
+retired in 0.9** along with the array family it described; a 0.9 store
+never carries it, and a store that does carry it is a 0.8-era store
+that must be rewritten ([§10.9](10-cross-chunk-linking.md#109-migration-to-v09)).
+The meaning of `"multiscale_links"` narrowed at the same time: since
+there is no separate cross-chunk family, and a cross-chunk link is just
+a link with a non-zero offsets segment, the token no longer says
+anything about chunk-spanning records — only about level-spanning ones.
 
 There is no `shared_vertex_groups` token — it was renamed to
 `shared_fragments` in 0.6 along with the underlying sharing primitive.
@@ -69,10 +77,9 @@ Per-level metadata lives in each level group's
 | Field                       | Type                              | Description |
 |-----------------------------|-----------------------------------|-------------|
 | `level`                     | int ≥ 0                           | Level index (0 = full resolution).                                                                                       |
-| `vertex_count`              | int ≥ 0                           | Total vertex rows across all `vertices/<chunk>` blobs at this level.                                                     |
-| `arrays_present`            | `list[string]`                    | Subset of canonical array names actually present.                                                                        |
-| `bin_shape`                 | `[float, ...] \| null`            | Per-level bin edge lengths.  `null` at level 0 (which inherits `base_bin_shape` from root); required at levels > 0.       |
-| `bin_ratio`                 | `[int, ...] \| null`              | Integer fold-change per axis vs level 0.  `(1, 1, …)` at level 0; `(2, 2, 2)` for a 2× coarser bin grid.                  |
+| `vertex_count`              | int ≥ 0                           | Total vertex rows across all `vertices` cells at this level.                                                             |
+| `arrays_present`            | `list[string]`                    | Subset of the canonical **family** names actually present — `"vertex_attributes"`, never `"vertex_attributes/<name>"`.   |
+| `fragments_tile`            | bool (default false)              | True when every chunk's vertex fragment index tiles its buffer exactly, letting a bulk read skip `vertex_fragments`.  Cleared by any write to `vertices` or `vertex_fragments`. |
 | `chunk_shape`               | `[float, ...] \| null`            | **v0.7** per-level chunk-shape override.  When set, each axis must be a positive integer multiple of root `chunk_shape`. |
 | `object_sparsity`           | float in `(0, 1]`                 | Fraction of objects retained at this level vs the source level.                                                          |
 | `coarsening_method`         | `"per_object" \| "manual" \| "none"` | How this level was generated.                                                                                          |
@@ -83,6 +90,16 @@ Per-level metadata lives in each level group's
 | `preserves_object_ids`      | bool (default false)              | True when this level inherits the parent's OID space (dropped objects → empty manifest slots).                           |
 | `inherited_num_objects`     | int \| null                       | OID-space size inherited from `parent_level` (required when `preserves_object_ids = true`).                              |
 | `shared_fragments`          | bool (default false)              | True when per-chunk fragments may be referenced by multiple objects' manifests.  Renamed from `shared_vertex_groups`.    |
+
+**`bin_shape` and `bin_ratio` are derived, not stored.**  They are
+properties of the level, but they are written *once*, into the NGFF
+per-level coordinate transform, and read back from it:
+`bin_ratio` is the transform's `scale` and `bin_shape` is twice its
+`translation` (see [§9.3](09-multi-resolution-support.md#93-spatial-chunk-scaling-v07)).
+A writer MUST NOT also place them in `zarr_vectors_level`, because two
+copies of one fact drift — and the drift is silent, since each copy
+looks reasonable on its own.  For the same reason `chunk_shape` and
+`bounds` are not writable through the level-metadata path.
 
 Cross-level invariants (enforced by
 `validate_level_chunk_shape_against_root`):
@@ -116,16 +133,16 @@ Recognized `zv_array` discriminator values (one per array kind):
 | `"vertices"`                       | `<level>/vertices/`                                                  |
 | `"vertex_fragments"`               | `<level>/vertex_fragments/`                                          |
 | `"link_fragments"`                 | `<level>/link_fragments/`                                            |
-| `"links"`                          | `<level>/links/<delta>/`                                             |
+| `"links_family"`                   | `<level>/links/<delta>/` — the family **group**                       |
+| `"links"`                          | `<level>/links/<delta>/<offsets>/`                                   |
 | `"attribute"`                      | `<level>/vertex_attributes/<name>/`                                  |
-| `"link_attribute"`                 | `<level>/link_attributes/<name>/<delta>/`                            |
-| `"object_index"`                   | `<level>/object_index/`                                              |
-| `"object_attribute"`               | `<level>/object_attributes/<name>/`                                  |
+| `"link_attribute_family"`          | `<level>/link_attributes/<name>/<delta>/` — the family **group**      |
+| `"link_attribute"`                 | `<level>/link_attributes/<name>/<delta>/<offsets>/`                  |
+| `"object_index"`                   | `<level>/object_index/` — the group holding `manifests`               |
+| `"object_attribute"`               | `<level>/object_attributes/<name>`                                   |
 | `"fragment_attribute"`             | `<level>/fragment_attributes/<name>/`                                |
-| `"groups"`                         | `<level>/groups/`                                                    |
-| `"groupings_attribute"`            | `<level>/group_attributes/<name>/`                                   |
-| `"cross_chunk_links"`              | `<level>/cross_chunk_links/<delta>/`                                 |
-| `"cross_chunk_link_attribute"`     | `<level>/cross_chunk_link_attributes/<name>/<delta>/`                |
+| `"groups"`                         | `<level>/groups`                                                     |
+| `"groupings_attribute"`            | `<level>/group_attributes/<name>`                                    |
 
 The literal `"groupings_attribute"` discriminator is on-disk legacy
 from before the `groupings` → `groups` rename; conceptual usage is
@@ -133,7 +150,7 @@ from before the `groupings` → `groups` rename; conceptual usage is
 
 ## 8.5 Object-Level Metadata
 
-Per-object data lives in `<level>/object_attributes/<name>/data`,
+Per-object data lives in `<level>/object_attributes/<name>`,
 dense `(B,)` or `(B, C)` arrays keyed by object ID.  The format
 imposes no fixed object-attribute schema; common conventions:
 
@@ -145,11 +162,11 @@ imposes no fixed object-attribute schema; common conventions:
 
 Object IDs are dense `0 .. B-1` ints; OID-preserving pyramid levels
 may carry empty manifests (objects dropped at this level still own a
-row in every `object_attributes/<name>/data` blob).
+row in every `object_attributes/<name>` array).
 
 ## 8.6 Group-Level Metadata
 
-Per-group data lives in `<level>/group_attributes/<name>/data`, dense
+Per-group data lives in `<level>/group_attributes/<name>`, dense
 `(G,)` or `(G, C)` arrays keyed by group ID.  Common conventions:
 
 - `"region_name"` — name per anatomical region group.
@@ -160,8 +177,9 @@ Per-group data lives in `<level>/group_attributes/<name>/data`, dense
 
 ## 8.7 Point-Level Metadata
 
-Per-vertex data lives in `<level>/vertex_attributes/<name>/<chunk>`,
-row-aligned to `<level>/vertices/<chunk>`.  Multi-channel attributes
+Per-vertex data lives in the `<level>/vertex_attributes/<name>` cell
+for a chunk, row-aligned to the `<level>/vertices` cell at the same
+coordinate.  Multi-channel attributes
 use `(N_k, C)` shape; channel labels live in the per-array
 `.zattrs.channel_names`.  Channel chunking — splitting a single
 attribute into multiple per-channel arrays — is a writer-side
@@ -177,4 +195,13 @@ The optional `crs` field on root metadata follows OME-Zarr RFC 4 / 5:
   names; the format does not stamp placeholder units.
 - Coordinate transforms (scale, translation) per level live in
   `zarr.json["multiscales"][0]["datasets"][i]["coordinateTransformations"]`
-  alongside the standard NGFF layout.
+  alongside the standard NGFF layout.  They are also the **only**
+  storage for a level's `bin_ratio` and `bin_shape`; see
+  [§9.3](09-multi-resolution-support.md#93-spatial-chunk-scaling-v07).
+
+The `multiscales` block itself is NGFF **version `"0.4"`** — the
+bare-root form, not v0.5's `attributes.ome` nesting.  NGFF reserves the
+entry's `type` field for the downsampling method, so the ZV
+discriminator is stamped one level down as
+`multiscales[0]["metadata"]["format"] = "zarr_vectors"` rather than
+overloading `type`.

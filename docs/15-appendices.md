@@ -21,11 +21,17 @@ The schema covers:
 ## Appendix B: Zarr Implementation Details
 
 - **Zarr version**: v3 only.
-- **Per-array layout**: every ZV array is a 1-D `uint8`,
-  single-chunk-per-coord array.  Internal record framing
-  (fragment-index, manifest-block, link-record streams) lives in
-  project byte layouts inside each chunk's payload, not in Zarr's
-  variable-length-chunk feature.
+- **Per-array layout**: each per-spatial-chunk array is a single
+  vlen-bytes array over the level's chunk grid, one cell per chunk,
+  cell files at `c/<i>/<j>/<k>`; the non-spatial arrays are single
+  ragged or dense arrays at their logical path.  Internal record
+  framing (fragment-index, manifest-block, link-record streams) lives
+  in project byte layouts inside each cell's payload.
+- **Cell addressing**: chunk at absolute coord `c` → cell
+  `c - chunk_grid_origin`; occupied cells are listed in the array's
+  `nonempty_chunks` attribute.
+- **Sharding**: optional, via Zarr v3's native `sharding_indexed`
+  codec.  There is no ZV-specific shard format.
 - **Group metadata**: root, level, and per-array `zarr.json` carry
   ZV-specific top-level keys (`zarr_vectors`,
   `zarr_vectors_level`, `zv_array`) alongside the Zarr v3 standard
@@ -58,14 +64,18 @@ Default per-array codec pipelines (from
 | `fragment_attributes/<name>`                 | user-declared                                                         | Blosc(Zstd, clevel=5)                                                                               | BYTE-SHUFFLE |
 | `vertex_fragments`                           | opaque `uint8` ([§7.3](07-core-arrays.md#73-vertex-fragments))       | none — opaque bytes (see [§11.4](11-compression-and-encoding.md#114-compression-strategy))          | —            |
 | `link_fragments`                             | opaque `uint8` ([§7.5](07-core-arrays.md#75-vertex-links))           | none — opaque bytes (see [§11.4](11-compression-and-encoding.md#114-compression-strategy))          | —            |
-| `links/<delta>`                              | user-declared integer (width chosen to fit `n_vertices_in_chunk`; see [§7.5](07-core-arrays.md#75-vertex-links)) | Blosc(Zstd, clevel=5)                                          | BITSHUFFLE   |
-| `link_attributes/<name>/<delta>`             | user-declared                                                         | Blosc(Zstd, clevel=5)                                                                               | BYTE-SHUFFLE |
-| `object_index`                               | `object` (vlen-bytes; opaque manifest blob — [§7.6](07-core-arrays.md#76-object-index)) | Blosc(Zstd, clevel=5)                                                            | BYTE-SHUFFLE |
+| `links/<delta>/<offsets>`                    | user-declared integer (width chosen to fit `n_vertices_in_chunk`; see [§7.5](07-core-arrays.md#75-vertex-links)) | Blosc(Zstd, clevel=5)                                          | BITSHUFFLE   |
+| `link_attributes/<name>/<delta>/<offsets>`   | user-declared                                                         | Blosc(Zstd, clevel=5)                                                                               | BYTE-SHUFFLE |
+| `object_index/manifests`                     | vlen-bytes (opaque manifest blob — [§7.6](07-core-arrays.md#76-object-index)) | Blosc(Zstd, clevel=5)                                                                       | BYTE-SHUFFLE |
 | `object_attributes/<name>`                   | user-declared                                                         | Blosc(Zstd, clevel=5)                                                                               | BYTE-SHUFFLE |
-| `groups`                                     | `int64` (ragged CSR of object IDs + offsets)                          | Blosc(Zstd, clevel=5)                                                                               | BYTE-SHUFFLE |
+| `groups`                                     | vlen-bytes (per-group `int64` id lists)                               | Blosc(Zstd, clevel=5)                                                                               | BYTE-SHUFFLE |
 | `group_attributes/<name>`                    | user-declared                                                         | Blosc(Zstd, clevel=5)                                                                               | BYTE-SHUFFLE |
-| `cross_chunk_links/<delta>/kK`               | vlen-bytes per cell (`L * uint8 ci` + `L * int64 vi` per record; v0.8 K-separated sharded layout — see [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)) | `sharding_indexed` + `vlen_bytes` (zarr v3 native)                                                  | n/a (sharded codec) |
-| `cross_chunk_link_attributes/<name>/<delta>/kK` | vlen-bytes per cell (user-declared row dtype)                       | `sharding_indexed` + `vlen_bytes`                                                                     | n/a (sharded codec) |
+
+Any of these may additionally be wrapped in `sharding_indexed` by
+supplying a `shard_shape`; sharding composes with the codec, it does
+not replace it.  Note that this table is the *recommended* pipeline —
+the default is no compressor at all (see
+[§11.3](11-compression-and-encoding.md)).
 
 Mesh stores may use Draco-encoded vertex+face co-encoding instead of
 the raw Blosc pipeline; the per-array `.zattrs.encoding = "draco"`
@@ -100,31 +110,31 @@ Common access patterns and which arrays they touch:
 
 | Pattern                              | Arrays read                                                              |
 |--------------------------------------|--------------------------------------------------------------------------|
-| Bounding-box at one level            | `vertices/<chunk>` for intersected chunks                                |
-| Per-bin sub-chunk filter             | `vertex_fragments/<chunk>` → row-slice into `vertices/<chunk>`           |
-| Single object reconstruction         | `object_index/data` → per-chunk `vertex_fragments/<chunk>` → `vertices/` |
-| All objects in a group               | `groups/data` → object ids → `object_index/data` → vertices              |
-| Per-object attribute query           | `object_attributes/<name>/data` (no vertex read)                         |
-| Pyramid drill-down (fine → coarse)   | `links/+1/<chunk>` (when `cross_level_storage != "none"`)                |
-| Cross-chunk traversal                | `cross_chunk_links/0/k2` cell at coord `(min(A,B)-origin) ⧺ (max(A,B)-origin)` — sort the chunk pair and read one sharded cell |
+| Bounding-box at one level            | `vertices` cells for intersected chunks                                  |
+| Per-bin sub-chunk filter             | `vertex_fragments` cell → row-slice into the `vertices` cell             |
+| Single object reconstruction         | `object_index/manifests[oid]` → per-chunk `vertex_fragments` → `vertices` |
+| All objects in a group               | `groups[gid]` → object ids → `object_index/manifests` → vertices         |
+| Per-object attribute query           | `object_attributes/<name>` (no vertex read)                              |
+| Enumerate occupied chunks            | the array's `nonempty_chunks` attribute — no store listing               |
+| Pyramid drill-down (fine → coarse)   | `links/+1/<offsets>` (when `cross_level_storage != "none"`)              |
+| Links leaving chunk `c` in direction `d` | `links/0/<offsets for d>` at cell `c - chunk_grid_origin` — one cell read |
+| All links incident on chunk `c`      | one cell read per offsets segment under `links/0/`; a single cell if the family uses `store = "duplicate"` |
 
 ## Appendix G: Migration Guide
 
-There is no in-place migration utility across major ZV versions
-(0.4 → 0.5 → 0.6 → 0.7).  Each step changed the on-disk record
-layout in a way that breaks readers built for the previous version;
-stores must be **rewritten from source**.
+There is no in-place migration utility across major ZV versions.  Each
+step changed the on-disk record layout in a way that breaks readers
+built for the previous version; stores must be **rewritten from
+source**.
 
-**0.7 → 0.8** is the exception.  The 0.8 change repartitions
-`cross_chunk_links/<delta>/data` (the single monolithic blob) into
-K-separated sharded vlen-bytes zarr arrays
-(`cross_chunk_links/<delta>/kK`) with a denser record encoding
-([§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)).
-A one-shot in-place migration helper regroups the records by their
-sorted unique chunks and writes them into the new kN cells;
-everything else in the store stays as-is.  See
-[§10.9](10-cross-chunk-linking.md#109-migration-from-v07)
-for the migration utility signature and behaviour.
+The 0.7 → 0.8 step was briefly an exception — it shipped a one-shot
+helper that repartitioned the monolithic cross-chunk-link blob into
+the sharded per-tuple layout.  **That helper is obsolete.**  0.9
+changed the physical form of every per-spatial-chunk array *and*
+re-keyed cross-chunk records from endpoint tuples to source chunks, so
+a 0.8 store has nothing at a path a 0.9 reader looks at, and the two
+families' cell sets do not correspond.  See
+[§10.9](10-cross-chunk-linking.md#109-migration-to-v09).
 
 See Appendix K below for the per-version summary.
 
@@ -143,7 +153,8 @@ See Appendix K below for the per-version summary.
   correspond 1-to-1; when objects are very large (a neuron with
   10⁵ vertices), fragments naturally chunk the object's vertices.
 - **Per-link attributes**: `link_attributes/<name>/<delta>/<chunk>`
-  read cost scales with the number of link rows in `links/<delta>/<chunk>`
+  read cost scales with the number of link rows in the cell of
+  `links/<delta>/<offsets>`
   — the same fragment index that partitions vertices partitions
   these attributes.
 
@@ -183,29 +194,30 @@ See Appendix K below for the per-version summary.
 ZV is versioned per-feature, not per-release: every entry below
 describes a breaking on-disk change made under a single version bump.
 Each major version is a hard break — rewrite stores from source
-between versions — with one exception: **0.7 → 0.8** ships an
-in-place migration helper for the sharded cross-chunk-link layout
-(see [§10.9](10-cross-chunk-linking.md#109-migration-from-v07)).
+between versions.  The 0.7 → 0.8 step once shipped an in-place helper;
+0.9 obsoleted it (see [§10.9](10-cross-chunk-linking.md#109-migration-to-v09)),
+so there is now no version pair with a migration path.
 
 ### Version-at-a-glance
 
 | Version | Headline change | New capability tokens | Hard break? | Migration |
 |---------|-----------------|-----------------------|-------------|-----------|
-| **0.8** | Partitioned `cross_chunk_links/<delta>/` (kN array cells keyed by sorted unique chunks) | `partitioned_cross_chunk_links` | Yes | **In-place helper** ([§10.9](10-cross-chunk-linking.md#109-migration-from-v07)) |
+| **0.9** | Single vlen array per per-chunk array (cells over the chunk grid); `cross_chunk_links` merged into `links/<delta>/<offsets>/` | — (retires `partitioned_cross_chunk_links`) | Yes | Rewrite |
+| **0.8.1** | Flat single-array layout for the dense / ragged arrays; `present_mask` replaced by `fill_value` | — | Yes | Rewrite |
+| **0.8** | Partitioned `cross_chunk_links/<delta>/` (kN array cells keyed by sorted unique chunks) | `partitioned_cross_chunk_links` | Yes | In-place helper *(obsoleted by 0.9)* |
 | **0.7** | Per-level `chunk_shape` override (`LevelMetadata.chunk_shape`); pyramid levels may grow chunks | — | Yes | Rewrite |
 | **0.6** | Fragment-index byte layout for `vertex_fragments/` + `link_fragments/`; manifest-block `object_index/data` | `fragment_index`, `shared_fragments` (replaces `shared_vertex_groups`) | Yes | Rewrite |
 | **0.5** | NGFF axis alignment; `format_version` → `zv_version`; flat `(K,)` vertex-offset layout; drops `vertex_counts/`, `metanode_children/`, `cross_chunk_faces/`, `object_index/pending/` | — | Yes | Rewrite |
 | **0.4.1** | Bare-integer level group names (`0/`, `1/`, …) | — | Yes (path-only) | Rewrite |
 | **0.4** | `<delta>` sub-folder layout for `links/`, `cross_chunk_links/`, `link_attributes/`, `cross_chunk_link_attributes/`; cross-pyramid-level link arrays | `multiscale_links` | Yes | Rewrite |
 
-### Cumulative capability set as of v0.8
+### Cumulative capability set as of v0.9
 
-A v0.8 store may carry any subset of:
+A v0.9 store may carry any subset of:
 
 - `multiscale_links` (any `delta ≠ 0` link array present; first
-  available in 0.4)
-- `partitioned_cross_chunk_links` (any `cross_chunk_links/<delta>/`
-  group present; coupled with `multiscale_links`; mandatory in 0.8+)
+  available in 0.4.  Since 0.9 it says nothing about chunk-spanning
+  records, only level-spanning ones)
 - `fragment_index` (mandatory in 0.6+)
 - `shared_fragments` (per-chunk fragments referenced by multiple
   object manifests; renamed from `shared_vertex_groups` in 0.6)
@@ -216,8 +228,61 @@ Tokens are open-set; readers must tolerate unknown values.
 
 ### Per-version detail
 
+- **0.9.0** — two independent on-disk breaks, shipped together.
+
+  *One array per logical array.*  Every per-spatial-chunk array —
+  `vertices`, `vertex_fragments`, `link_fragments`,
+  `links/<delta>/<offsets>`, `vertex_attributes/<name>`,
+  `fragment_attributes/<name>`,
+  `link_attributes/<name>/<delta>/<offsets>` — becomes **one** Zarr v3
+  vlen-bytes array whose shape is the level's chunk grid, with one
+  cell per spatial chunk and its file at `<array>/c/<i>/<j>/<k>`.
+  This replaces the layout in which every spatial chunk was its own
+  single-chunk `uint8` sub-array under a per-array group.  A chunk at
+  absolute coord `c` lands in cell `c - origin`, where
+  `origin = floor(min_corner / chunk_shape)` is stored as the array's
+  `chunk_grid_origin` attribute (absent ⇒ zero origin), which lets
+  data with negative coordinates map onto a 0-indexed array.
+  Non-empty cells are tracked in `nonempty_chunks` for O(1)
+  enumeration.  An optional `shard_shape` wraps the cells in Zarr v3's
+  `sharding_indexed` codec.  See
+  [§5.2](05-zarr-store-structure.md#52-zarr-version-requirements).
+
+  *One connectivity family.*  `cross_chunk_links` and
+  `cross_chunk_link_attributes` are **merged into** `links` and
+  `link_attributes`.  Connectivity is one family: an intra-chunk link
+  is just a link whose relative chunk offset is zero.
+  `links/<delta>` becomes a **group** whose children are one rank-D
+  vlen array per relative-offset segment
+  (`links/<delta>/<offsets>`, cell = the record's *source* chunk,
+  `vi_k` local to `src + o_k`), and
+  `link_attributes/<name>/<delta>/<offsets>` mirrors it exactly — same
+  offsets, same cells, same row order.  Endpoint tuples are no longer
+  part of any path, so both families are ordinary chunk-grid arrays
+  and shard like everything else.  The
+  `partitioned_cross_chunk_links` capability token is retired and
+  `multiscale_links` narrows to mean only "`delta ≠ 0` arrays are
+  present".  See
+  [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-the-links-family).
+
+  Migration: **rewrite from source**; the 0.7 → 0.8 helper does not
+  apply ([§10.9](10-cross-chunk-linking.md#109-migration-to-v09)).
+
+- **0.8.1** — flat single-array layout for the dense and ragged
+  arrays.  Removes the `group`-with-a-`data`-child pattern used by
+  every non-spatial array (`object_attributes`, `group_attributes`,
+  `groups`, the parametric blobs) and writes each logical array as a
+  single standard Zarr v3 array at its logical path.  Sparse coverage
+  is expressed through the array's own `fill_value` — NaN for floats,
+  a sentinel for integers — instead of a sibling `present_mask`
+  child array, so absence is in-band and cannot desynchronize from
+  the data.  Ragged arrays move to the vlen-bytes codec, matching what
+  `object_index/manifests` already used.  Custom per-array attributes
+  move from the parent group's `attributes` block into the array's
+  own.  Migration: rewrite.
+
 - **0.8.0** — sharded cross-chunk-link layout
-  ([§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)).
+  ([§10.6](10-cross-chunk-linking.md#106-on-disk-layout-the-links-family)).
   The single monolithic `cross_chunk_links/<delta>/data` int64 blob
   (and its parallel
   `cross_chunk_link_attributes/<name>/<delta>/data`) is replaced by
@@ -242,7 +307,7 @@ Tokens are open-set; readers must tolerate unknown values.
   (`len(bytes) / (9 * link_width)`).  Migration: **in-place helper**
   that regroups records by their sorted unique
   chunks, rewrites the leaves, and bumps `zv_version` —
-  see [§10.9](10-cross-chunk-linking.md#109-migration-from-v07).
+  see [§10.9](10-cross-chunk-linking.md#109-migration-to-v09).
 
 - **0.7.0** — per-level `chunk_shape` override on `LevelMetadata`
   ([§6.6](06-spatial-indexing.md#66-per-level-chunk-shape-v07)).
@@ -324,9 +389,9 @@ target and converters can translate between them.
 | `info["@type"] = "neuroglancer_annotations_v1"` | `zarr.json["zarr_vectors"]["zv_version"]` + `geometry_types` |
 | `annotation_type` (geometry discriminator)    | `geometry_types` (list) + per-record `link_width`            |
 | `dimensions`, `lower_bound`, `upper_bound`    | NGFF `multiscales[0].axes` (with units) + `bounds`           |
-| `properties[]` (per-annotation attributes)    | `vertex_attributes/<name>/<chunk>` (per-vertex), or `object_attributes/<name>/data` (per-object) when one annotation = one object |
-| `relationships[]` (per-segment links)         | `groups/data` + `group_attributes/<name>/data` (groups keyed by segment id) |
-| `by_id/` (annotation ID → record)             | `object_index/data` (manifest keyed by dense `[0, B)` OID)   |
+| `properties[]` (per-annotation attributes)    | `vertex_attributes/<name>/<chunk>` (per-vertex), or `object_attributes/<name>` (per-object) when one annotation = one object |
+| `relationships[]` (per-segment links)         | `groups` + `group_attributes/<name>` (groups keyed by segment id) |
+| `by_id/` (annotation ID → record)             | `object_index/manifests` (manifest keyed by dense `[0, B)` OID)   |
 | `spatial/<level>/` (multi-res grid + random subsample) | Pyramid levels `0/`, `1/`, … with per-object coarsening + `cross_level_storage` for fine→coarse mapping |
 | `spatial[level].grid_shape` × `chunk_size`    | Per-level effective `chunk_shape` (root + optional v0.7 `LevelMetadata.chunk_shape` override) |
 | `spatial[level].limit` (max annotations / cell) | Implicit via vertex count / bin_shape; pyramid coarsening controlled by `reduction_factor` and `coarsening_method` |
@@ -345,7 +410,7 @@ a fixed positional record.  Zarr-vectors expresses them via the
 | `LINE`                        | 2 vectors (endpoint A, B)   | `geometry_types = ["polyline"]` or `["line"]`; one fragment per annotation, 2-vertex range; no `links/` needed under `links_convention = "implicit_sequential"`. |
 | `AXIS_ALIGNED_BOUNDING_BOX`   | 2 vectors (min, max)        | Two options. **(a)** `geometry_types = ["point_cloud"]` with per-object attributes `min_corner`, `max_corner` carrying the box (one annotation = one object).  **(b)** `geometry_types = ["line"]` with the diagonal endpoints — readers reconstruct the AABB.  Option (a) preserves "this is a box" semantics; (b) is simpler when boxes coexist with lines. |
 | `ELLIPSOID`                   | 2 vectors (center, radii)   | `geometry_types = ["point_cloud"]` with per-object attributes `center` and `radii`.  Same shape as option (a) for AABB.  Centers populate `vertices/<chunk>`; the `radii` `object_attribute` carries the second vector. |
-| `POLYLINE`                    | uint32 count + N vectors    | `geometry_types = ["polyline"]`; one fragment per polyline (a range `[start, count)` over `vertices/<chunk>`); manifest in `object_index/data` carries one block per chunk the polyline crosses; `links_convention = "implicit_sequential"`. |
+| `POLYLINE`                    | uint32 count + N vectors    | `geometry_types = ["polyline"]`; one fragment per polyline (a range `[start, count)` over `vertices/<chunk>`); manifest in `object_index/manifests` carries one block per chunk the polyline crosses; `links_convention = "implicit_sequential"`. |
 
 Multi-geometry stores are natural in zarr-vectors (just list every
 geometry in `geometry_types`); the precomputed format restricts a
@@ -358,7 +423,7 @@ several stores to mix kinds.
 per-vertex (or per-object) attributes:
 
 - Numeric properties (`uint8`, `int8`, ..., `float32`) → typed
-  `vertex_attributes/<name>/<chunk>` or `object_attributes/<name>/data`.
+  `vertex_attributes/<name>/<chunk>` or `object_attributes/<name>`.
   Zarr-vectors uses the array's `dtype` directly; no per-property
   enum table is needed at the schema level.
 - `rgb` / `rgba` → either an `(N, 3)` / `(N, 4)` uint8 attribute, or
@@ -373,14 +438,14 @@ per-vertex (or per-object) attributes:
 map onto zarr-vectors **groups**:
 
 - The precomputed `relationships[<rel_name>]` becomes a per-relationship
-  `groups/data` array (or, if multiple relationships, one `groups`-like
+  `groups` array (or, if multiple relationships, one `groups`-like
   structure per relationship name — typically expressed today by
   rechunking by relationship; see [§8](08-metadata.md)).
 - Each group corresponds to one segment id.  Its membership list is
   the annotation IDs (= object IDs in zarr-vectors).
 - The inverse — annotation → list of segments — is then the
   group-membership matrix (which annotations belong to which groups);
-  in zarr-vectors this is recovered by iterating `groups/data`, the
+  in zarr-vectors this is recovered by iterating `groups`, the
   same operation that powers "show all annotations on segment X" in
   precomputed.
 
@@ -408,7 +473,7 @@ Equivalents:
 | Cell size at level L               | `spatial[L].chunk_size`           | `RootMetadata.chunk_shape` × per-level `chunk_scale_factor` (v0.7) |
 | LOD selection knob                 | `spatial[L].limit`                | `reduction_factor` + per-level `object_sparsity`   |
 | Cross-level identity               | annotation ID is shared across levels | OID-preserving pyramid (`preserves_object_ids = true`) |
-| Drillable parent→child mapping     | implicit (random subsample)       | optional `links/<delta>/<chunk>` arrays ([§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional))     |
+| Drillable parent→child mapping     | implicit (random subsample)       | optional `links/<delta>/<offsets>` arrays ([§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional))   |
 
 Precomputed's "drill the visible cells until you've returned at most
 `limit` annotations per cell" maps to zarr-vectors' "ask each level
@@ -428,7 +493,7 @@ coarsener.
   uint8 / int8 / ... types rather than upcasting.
 - **Relationships** transcode to groups keyed by segment id.  In
   practice, very large segment-id spaces (10⁸+ segments) suggest
-  using `object_attributes/segment_id` rather than `groups/data` if
+  using `object_attributes/segment_id` rather than `groups` if
   most segments touch zero or one annotation.
 - **Spatial index** does NOT transcode 1:1.  The pyramid is rebuilt
   using the per-object coarsener; the precomputed `limit` rule has

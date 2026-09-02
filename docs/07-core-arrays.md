@@ -1,24 +1,31 @@
 # 7. Core Arrays
 
-This section is the array-by-array reference.  Each array is a Zarr v3
-array whose dtype, chunk shape, and codec pipeline depend on its role:
+This section is the array-by-array reference.  Two physical shapes
+cover every array in a store:
 
-- **Geometry and attribute arrays** (`vertices`, `links`,
-  `vertex_attributes`, `fragment_attributes`, `object_attributes`, ...) use standard numeric
-  dtypes — `float16` / `float32` / `float64` / `int64` — declared in
-  `.zattrs.dtype` and flow through the standard Zarr v3 codec
-  pipeline.  A vanilla zarr reader sees them as ordinary numeric arrays.
-- **Index and framing arrays** (`vertex_fragments`, `link_fragments`,
-  per-object manifest blobs in `object_index/`) carry
-  **project-internal binary record framings** inside `uint8` or
-  vlen-bytes chunks.  They bypass the Zarr codec pipeline (see
-  [§11.4](11-compression-and-encoding.md#114-compression-strategy)) and
-  require a zarr-vectors-aware decoder to interpret.
+- **Per-spatial-chunk arrays** (`vertices`, `vertex_fragments`,
+  `link_fragments`, `links/<delta>/<offsets>`,
+  `vertex_attributes/<name>`, `fragment_attributes/<name>`,
+  `link_attributes/<name>/<delta>/<offsets>`) are each **one** Zarr v3
+  vlen-bytes array over the level's chunk grid.  One cell holds one
+  spatial chunk's payload bytes; the element dtype and the record
+  framing inside a cell are declared in the array's attributes and are
+  opaque to Zarr.  Chapter [§5.2](05-zarr-store-structure.md#52-zarr-version-requirements)
+  gives the cell model — grid origin, presence, sharding — and this
+  chapter gives each array's payload.
+- **Non-spatial arrays** (`object_index/manifests`, `groups`,
+  `object_attributes/<name>`, `group_attributes/<name>`) are single
+  Zarr arrays at their logical path, ragged (vlen-bytes) or dense
+  (numeric) as noted per array.
+
+Throughout, `<i.j.k>` names a spatial chunk; since 0.9 that chunk is a
+*cell* of the array rather than a sub-array of its own, and its file
+lives at `<array>/c/<i>/<j>/<k>`.
 
 A per-array `zarr.json` carries a `"zv_array"` discriminator plus a
-small shape/dtype block; per-array `.zattrs` does **not** duplicate
-fields the byte payload already carries (e.g. `vertex_fragments` does
-not store `num_fragments` outside the blob).
+small shape/dtype block; it does **not** duplicate fields the byte
+payload already carries (e.g. `vertex_fragments` does not store
+`num_fragments` outside the blob).
 
 > Throughout this chapter, `.zattrs` is colloquial shorthand for the
 > per-array **attributes** block inside the array's Zarr v3
@@ -27,8 +34,8 @@ not store `num_fragments` outside the blob).
 ## 7.1 Vertex Positions
 
 - **Name**: `vertices`
-- **Path**: `<level>/vertices/<i.j.k>` (one chunk key per occupied
-  spatial chunk).
+- **Path**: `<level>/vertices`, one cell per occupied spatial chunk
+  (file at `c/<i>/<j>/<k>`).
 - **Payload**: raw little-endian values whose dtype is declared in
   `.zattrs.dtype`.  Any numeric dtype that can carry spatial
   coordinates is allowed: **floats** (`float16` / `float32` /
@@ -47,9 +54,15 @@ not store `num_fragments` outside the blob).
 - **Encoding**: `raw` (default) or `draco` (mesh-only; positions and
   faces are co-encoded inside a single Draco point-cloud or mesh
   blob).
-- **Compression**: Blosc + Zstd + BYTE-SHUFFLE.
+- **Compression**: none by default; see
+  [§5.2](05-zarr-store-structure.md#52-zarr-version-requirements).
 - **`.zattrs`**: `{"zv_array": "vertices", "dtype": "<dtype>",
-  "encoding": "raw" | "draco"}`.
+  "encoding": "raw" | "draco"}`, plus the per-chunk-array attributes
+  `nonempty_chunks` and (when non-zero) `chunk_grid_origin`.  The
+  element dtype MUST be read from the `dtype` attribute — the Zarr
+  `data_type` is `variable_length_bytes` for every cell.
+- **Row count**: `N_k` is derived, `len(cell) // (itemsize * sid_ndim)`;
+  it is not stored.
 - **Spatial locality**: rows lie within the chunk's spatial bounds
   modulo boundary policy (writers may keep vertices physically outside
   the bin grid when they belong to objects that straddle a boundary;
@@ -58,23 +71,26 @@ not store `num_fragments` outside the blob).
 ## 7.2 Vertex Attributes
 
 - **Name**: `vertex_attributes`
-- **Path**: `<level>/vertex_attributes/<name>/<i.j.k>`.
-- **Payload**: raw little-endian rows, row-aligned to
-  `vertices/<i.j.k>`.  Shape per chunk is `(N_k,)` for a scalar
-  attribute or `(N_k, C)` for a multi-channel attribute (`C` declared
-  in `.zattrs`).
+- **Path**: `<level>/vertex_attributes/<name>`, one cell per spatial
+  chunk.
+- **Payload**: raw little-endian rows, row-aligned to the `vertices`
+  cell at the same coordinate.  Shape per chunk is `(N_k,)` for a
+  scalar attribute or `(N_k, C)` for a multi-channel attribute (`C`
+  declared in `.zattrs`).
 - **`.zattrs`**: `{"zv_array": "attribute", "name": "<name>",
-  "dtype": "<dtype>", "shape": [...]}`.  The optional `channel_names`
-  / `channel_dtype` fields describe per-channel labels for multi-channel
-  attributes (gene names, etc.).
-- **Selective access**: a reader fetches only the
-  `vertex_attributes/<name>/<i.j.k>` chunks it needs; chunk listings
-  are O(non-empty-chunks).
+  "dtype": "<dtype>", "row_shape": [] | [C]}`.  `row_shape` is the
+  authority on column count — `[]` for a scalar attribute, `[C]` for a
+  multi-channel one.  The optional `channel_names` / `channel_dtype`
+  fields describe per-channel labels (gene names, etc.); they are
+  labels, **not** a substitute for `row_shape`, so an unnamed
+  multi-column attribute still reads back at its true width.
+- **Selective access**: a reader fetches only the cells it needs, and
+  enumerates occupied cells from `nonempty_chunks` in O(1).
 
 ## 7.3 Vertex Fragments
 
 - **Name**: `vertex_fragments`
-- **Path**: `<level>/vertex_fragments/<i.j.k>`.
+- **Path**: `<level>/vertex_fragments`, one cell per spatial chunk.
 - **Payload**: a single byte blob in the v1 fragment-index layout:
 
   ```text
@@ -103,13 +119,15 @@ not store `num_fragments` outside the blob).
   row indices.  Explicit fragments may share row indices, enabling
   vertex re-use across fragments inside one chunk.
 
-- **`.zattrs`**: `{"zv_array": "vertex_fragments"}`.  All structural
-  numbers (F, R, T) live in the blob header so `.zattrs` stays
-  minimal.
+- **`.zattrs`**: `{"zv_array": "vertex_fragments", "encoding":
+  "fragment_index_v1"}`.  All structural numbers (F, R, T) live in the
+  blob header so the attributes stay minimal.
+- **Empty chunk**: a 16-byte header-only blob with `F = 0`, `R = 0`,
+  no bitmap, no range table, no CSR.
 - **Random access**: `is_range(f)` is a single bit lookup; `range(f)`
   and `indices(f)` use a lazy prefix-popcount of the bitmap.
-- **Compression**: Blosc + Zstd + BYTE-SHUFFLE (the heterogeneous
-  int64 + uint32 payload decorrelates well after byte-shuffling).
+- **Compression**: none — the blob is written through the vlen-bytes
+  serializer as-is.
 
 The legacy `vertex_group_offsets` array (paired `(K, 2)` int64 offsets,
 pre-0.5) was first reduced to a flat `(K,)` int64 of vertex offsets
@@ -141,7 +159,7 @@ subsection is about the choice at the vertex/link → fragment layer.
 Two extremes bound the design space:
 
 - **Single-owner.**  Every row of `vertices/<chunk>` (or
-  `links/0/<chunk>`) belongs to exactly one fragment.  Writers
+  the intra-chunk link array) belongs to exactly one fragment.  Writers
   then have the freedom to organise the payload so that all rows
   of a fragment lie contiguously, and the index has to store only
   the run `[start, count)` per fragment.  Reads are cheap — one
@@ -275,19 +293,21 @@ the property the format exists to provide.
 ## 7.4 Groups
 
 - **Name**: `groups`
-- **Path**: `<level>/groups/data`.
-- **Payload**: flat ragged CSR.  Two blobs in practice — `groups/data`
-  carries concatenated `int64` object IDs, with row partitions inside
-  the same blob (CSR offsets prefixed; see the encoding implementation
-  for byte details).  Logically `(G,)` rows, each a variable-length
-  list of object IDs.
-- **`.zattrs`**: `{"zv_array": "groups", "num_groups": G, ...}`.
-- **Companion**: `group_attributes/<name>/data` carries per-group
-  attribute arrays of shape `(G,)` or `(G, C)` with `.zattrs`
-  `{"zv_array": "groupings_attribute", "name": "<name>", "dtype":
-  "<dtype>", "shape": [...]}`.  (The discriminator literal kept the
-  legacy string for on-disk compatibility; the conceptual rename is
-  `groupings` → `groups`.)
+- **Path**: `<level>/groups` — a single 1-D vlen-bytes array of shape
+  `(G,)`.  Row `gid` is that group's `int64` member-id list.  (Before
+  0.8.1 this was a `groups/` group wrapping a `data` blob.)
+- **`.zattrs`**: `{"zv_array": "groups", "num_groups": G}`, plus an
+  optional `group_ranges` map.
+- **Contiguous groups**: a group whose members are exactly
+  `range(start, stop)` may be stored as an O(1) descriptor —
+  `group_ranges: {"<gid>": [start, stop]}` — with an empty placeholder
+  row in the array.  A reader MUST consult `group_ranges` before
+  concluding that an empty row means an empty group.
+- **Companion**: `group_attributes/<name>` is a dense array of shape
+  `(G,)` or `(G, C)` with `.zattrs` `{"zv_array": "groupings_attribute",
+  "name": "<name>", "dtype": "<dtype>", "shape": [...]}`.  (The
+  discriminator literal kept the legacy string for on-disk
+  compatibility; the conceptual rename is `groupings` → `groups`.)
 
 Groups have no spatial extent — they describe arbitrary partitions of
 the object set (cell types, brain regions, fascicle bundles, …).
@@ -297,53 +317,72 @@ parent id, …); the format does not impose a tree.
 ## 7.5 Vertex Links
 
 - **Name**: `links`
-- **Path**: `<level>/links/<delta>/<i.j.k>`.
-- **`<delta>` axis**: the *pyramid-level delta* between the two link
-  endpoints.  `delta = 0` is mandatory whenever the geometry has
-  explicit links; `delta ≠ 0` is optional and only emitted when
-  `cross_level_storage != "none"` (see [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).
+- **Path**: `<level>/links/<delta>/<offsets>`, one cell per spatial
+  chunk.  `links/<delta>` is a **group**, not an array; its children
+  are one array per distinct relative-offset segment.
+  [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-the-links-family)
+  is the normative reference for the path grammar and cell placement;
+  this section covers the record.
+- **`<delta>` axis**: the *pyramid-level delta* between the source
+  endpoint and the others.  `delta = 0` is mandatory whenever the
+  geometry has explicit links; `delta ≠ 0` is optional and only
+  emitted when `cross_level_storage != "none"` (see
+  [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).
+- **`<offsets>` axis**: where the other endpoints sit relative to the
+  source chunk.  All-zero offsets are the intra-chunk case; `self` is
+  the segment when `link_width == 1`.
 
-### delta = 0 (intra-level)
+### The record
 
-- **Payload**: a flat concatenated payload of link rows, each row
-  `link_width` × integer vertex-row indices.  Vertex indices are
-  **chunk-local** — they reference rows of `vertices/<i.j.k>`.
-  Because the index space is bounded by `n_vertices_in_chunk`, the
-  writer SHOULD pick the narrowest unsigned (or signed) integer dtype
-  that covers the expected per-chunk vertex count: `uint8` for
+- **Payload**: rows of `link_width` integer vertex-row indices, one
+  per endpoint, optionally preceded by a permutation index in column 0
+  (see `has_perm` in
+  [§10.6.5](10-cross-chunk-linking.md#1065-whether-a-permutation-index-is-present)).
+  Every index is **chunk-local**: `vi_k` references a row of the
+  `vertices` cell at chunk `src + o_k`, where `src` is the cell holding
+  the record and `o_0 = 0` by definition.  No record stores a global
+  vertex ID or names a chunk.
+- **dtype**: because the index space is bounded by
+  `n_vertices_in_chunk`, a writer SHOULD pick the narrowest integer
+  dtype that covers the expected per-chunk vertex count: `uint8` for
   chunks with ≤ 256 vertices, `uint16` for ≤ 64 K, `uint32` for ≤ 4 G,
   `int64` as the universally-safe fallback.  Narrower dtypes are a
-  4–8× storage savings on typical data and the reader honours
-  whatever is declared in `.zattrs.dtype`.
-- **Companion**: `link_fragments/<i.j.k>` — fragment index in the
-  same v1 byte layout as [§7.3](#73-vertex-fragments) — carries the per-fragment partition of
-  link rows.  Each link fragment is the set of link rows belonging to
-  one vertex fragment (so `link_fragments` partitions
-  `links/0/<i.j.k>` row-for-row in parallel with how
-  `vertex_fragments/<i.j.k>` partitions `vertices/<i.j.k>`).
-- **`.zattrs`**: `{"zv_array": "links", "level_delta": 0,
-  "link_width": L, "num_links": M, "dtype": "<integer dtype>"}`.
+  4–8× storage saving on typical data and the reader honours whatever
+  is declared in `.zattrs.dtype`.
 - **`link_width`**:
   - `1` — single parent reference (skeleton parents, pyramid
     metanode drill-down).
   - `2` — generic edge (graph, polyline-with-branches).
   - `3` — mesh face (triangle).
 
-### delta ≠ 0 (cross-pyramid-level — optional)
+  `link_width` is a property of the whole `<delta>` family, declared on
+  the family group, not of an individual offsets array.
 
-- **Payload**: an inline self-describing record stream.  Each record
-  is `link_width` endpoints, each endpoint a `(chunk_coords,
-  local_vertex_index)` pair.  Endpoint 0 lives at the *owning* level
-  L; endpoints `k > 0` live at level `L + delta`.  For `link_width =
-  1`, the single endpoint is at `L + delta` and is paired with an
-  implicit source defined by the owning chunk (the record stores only
-  the child reference).
-- **No `link_fragments/` companion**: cross-level links don't reuse
-  the intra-level fragment-index partitioning.  Records carry their
-  own chunk coordinates inline.
-- **When emitted**: only when `cross_level_storage` ∈ {`implicit`,
-  `explicit`}.  Stores with `cross_level_storage = "none"` never
-  contain `links/<delta>/<chunk>` for `delta ≠ 0`.
+### Cell framing and the fragment sidecar
+
+- The array at `delta == 0` whose offsets are **all zero** stores flat
+  concatenated rows and carries a companion `link_fragments` cell —
+  fragment index in the same v1 byte layout as
+  [§7.3](#73-vertex-fragments) — giving the per-fragment partition of
+  link rows.  Each link fragment is the set of link rows belonging to
+  one vertex fragment.
+- **Every other array** — any non-zero offset, any `delta ≠ 0` — uses
+  an inline self-describing ragged blob and has **no** sidecar.
+- `link_fragments` is keyed by chunk **alone**: it carries no delta and
+  no offsets segment, so exactly one array in the store may write it.
+  A second writer would silently clobber the first.
+
+### `.zattrs`
+
+Family group `links/<delta>`:
+`{"zv_array": "links_family", "level_delta": <delta>, "link_width": L,
+"sid_ndim": ndim, "directed": bool, "store": "canonical" | "duplicate",
+"num_links": M, "num_physical_records": P}` — the two counts are absent
+until the family is finalized.
+
+Offsets array `links/<delta>/<offsets>`:
+`{"zv_array": "links", "dtype": "<integer dtype>", "offsets": [[...]],
+"has_perm": bool, "link_width": L, "level_delta": <delta>}`.
 
 ### Implicit-sequential convention
 
@@ -355,20 +394,32 @@ intra-level link records:
 - `"implicit_sequential"` — within each fragment, vertex `i` connects
   to vertex `i+1`.  The `links/0/` group is omitted entirely.
 - `"implicit_sequential_with_branches"` — sequential parents are
-  implicit; `links/0/<i.j.k>` stores only the *non-sequential* (branch)
-  rows.
+  implicit; the intra-chunk array `links/0/<all-zero offsets>` stores
+  only the *non-sequential* (branch) rows.
 - `"explicit"` — every link is materialized.
 
-Cross-chunk links (`cross_chunk_links/0/`) and cross-level links
-(`links/<delta>/`, `delta ≠ 0`) are unaffected by the implicit
-convention — they are always explicit.
+The convention governs only the **intra-chunk** array.  Links that
+cross a chunk boundary (a non-zero offsets segment) and cross-level
+links (`delta ≠ 0`) are always explicit — a sequential run that leaves
+a chunk cannot be implied by row adjacency, because the next vertex is
+row-numbered in a different chunk.
 
 ## 7.6 Object Index
 
 - **Name**: `object_index`
-- **Path**: `<level>/object_index/data` (single flat blob).
-- **Payload**: B per-object manifests, back-to-back.  Each manifest is
-  a sequence of *manifest blocks*; each block names one spatial chunk
+- **Path**: `<level>/object_index/manifests` — a 1-D vlen-bytes array
+  of shape `(B,)`.  Row `object_id` holds that object's manifest blob;
+  the array is addressed positionally, so a single-object read fetches
+  one Zarr chunk.  `object_index/` itself is a group carrying the index
+  metadata.  (Before 0.8.1 this was a `data` + `offsets` byte-blob
+  pair, still recognised as the legacy layout when `layout` is absent.)
+- **Chunking**: manifests are chunked in buckets of at most 16 384
+  objects, which sets the read-amplification ceiling for a single-OID
+  fetch.  The bucket is fixed when the array is created and cannot be
+  changed by a later resize, so it MUST NOT be derived from the number
+  of objects that happen to be present at the first write.
+- **Payload**: one manifest blob per object.  Each manifest is a
+  sequence of *manifest blocks*; each block names one spatial chunk
   and a fragment reference:
 
   ```text
@@ -387,11 +438,17 @@ convention — they are always explicit.
   `vertex_fragments/<chunk_coords>` only.  This is what lets writers
   author chunks independently: no global fragment-numbering scheme.
 
-- **`.zattrs`**: `{"zv_array": "object_index", "num_objects": B,
-  "sid_ndim": ndim}`.
-- **Empty manifest**: `B_obj = 0` — represents an object that exists
-  in the OID space but carries no fragments at this level (used by
-  ID-preserving pyramids that drop objects without renumbering).
+- **`.zattrs`** (on the `object_index` group): `{"zv_array":
+  "object_index", "num_objects": B, "num_present": P, "sid_ndim":
+  ndim, "layout": "vlen_manifests_v1"}`.  `num_objects` is the slot
+  count; `num_present` is how many slots hold a non-empty manifest.  A
+  reader MUST reject any other `layout` value rather than guess.
+- **Empty manifest**: `B_obj = 0`, exactly four bytes — an object that
+  exists in the OID space but carries no fragments at this level (used
+  by ID-preserving pyramids that drop objects without renumbering).
+  Object presence is therefore a property of the manifest, not of the
+  OID range: `0 <= id < num_objects` does **not** imply the object is
+  present at this level.
 
 ### Identity convention
 
@@ -404,109 +461,100 @@ the explicit standard convention (`object_index_convention =
 
 ## 7.7 Cross-Chunk Links
 
-- **Name**: `cross_chunk_links`
-- **Path** (v0.8+): records are filed into **K-separated sharded
-  vlen-bytes zarr arrays** under
-  `<level>/cross_chunk_links/<delta>/kK`, one `kK` per distinct K
-  (`1 ≤ K ≤ link_width`).  Each `kK` array has shape `(Cx,…)*K`,
-  inner chunks of `(1,)*(sid_ndim*K)`, and outer shards of
-  `(4,)*(sid_ndim*K)` by default.  A record whose sorted-unique
-  chunks are `(c_0, …, c_{K-1})` (lex order) lives at cell coord
-  `(c_0 - origin) ⧺ … ⧺ (c_{K-1} - origin)` where `origin` is
-  `kK.attrs.chunk_origin`.  See
-  [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)
-  for the full layout description.
-- **Per-record payload**: each record is `link_width` chunk-indices
-  (uint8, one per endpoint) followed by `link_width` local vertex
-  indices (int64, one per endpoint) — total `9 * link_width` bytes
-  per record.  The chunk-index `ci_i` selects one of the K sorted
-  chunks in the cell coord; that's the chunk endpoint `i` lives in.
-  No chunk coords are repeated inside the payload.
-- **Parent-group `.zattrs`**: `{"zv_array": "cross_chunk_links",
-  "level_delta": <delta>, "link_width": L, "sid_ndim": ndim, "layout":
-  "sharded_v1"}`.  Each `kK` array additionally carries
-  `{"zv_array": "cross_chunk_links_kN", "K": K, "chunk_origin":
-  [o_0, …]}` and standard zarr `shape` / `chunk_shape` / codecs.
-  `num_links` is no longer stored anywhere — per-cell counts are
-  derived from cell byte length as `len(bytes) / (9 * link_width)`.
-- **Endpoint level convention**: endpoint 0 (`ci_0`, `vi_0`) lives at
-  the *owning* resolution level L; endpoints `k > 0` live at `L +
-  delta`.  For `delta = 0` both endpoints are at the same level; for
-  `delta ≠ 0` endpoint 0 is at level L and the remaining endpoints are
-  at level `L + delta` (which may have a different `chunk_shape` and
-  therefore a different chunk grid — see [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).
-- **Canonicalization**: writers MUST emit `ci = [0, 1]` for
-  `delta = 0 AND link_width = 2` (undirected edges).  Other cases
-  have no spec-mandated canonicalization; the `ci` permutation
-  preserves semantic ordering (source/target for cross-level links,
-  face winding for mesh records).
-- **`link_width` values**: same as [§7.5](#75-vertex-links) — `2` for edges, `3` for
-  triangle faces (the v0.5 replacement for the dropped
-  `cross_chunk_faces/` array), `1` for single child references in
-  metanode drill-down.
-- **Capabilities**: any `cross_chunk_links/<delta>/` group at any
-  delta makes the store advertise both `CAP_MULTISCALE_LINKS` and
-  `CAP_PARTITIONED_CROSS_CHUNK_LINKS` in its `format_capabilities`.
-  Stores that carry `multiscale_links` without
-  `partitioned_cross_chunk_links` are v0.7-era monolithic-blob stores
-  and need migration before a v0.8 reader can open them — see [§10.9](10-cross-chunk-linking.md#109-migration-from-v07).
+*Merged into `links` in v0.9.*  There is no `cross_chunk_links` array.
+
+A link that crosses a chunk boundary is a record in
+`links/<delta>/<offsets>` ([§7.5](#75-vertex-links)) whose offsets are
+non-zero; an intra-chunk link is one whose offsets are all zero.  Both
+are the same record shape, in the same family, under the same policy —
+the offsets segment is the only thing that differs.
+
+The endpoint chunk is recovered from the cell coordinate plus the
+offsets segment, and each `vi_k` is local to that chunk, so the
+replacement stores no global vertex IDs at all and there is nothing to
+reconstruct.  See
+[§10.6](10-cross-chunk-linking.md#106-on-disk-layout-the-links-family)
+for the full layout and
+[§10.9](10-cross-chunk-linking.md#109-migration-to-v09) for why 0.8
+stores cannot be migrated in place.
+
+Consequently a store no longer advertises
+`partitioned_cross_chunk_links`; that capability token was retired in
+0.9.  `multiscale_links` survives, and now marks only the presence of
+`delta ≠ 0` arrays.
 
 ## 7.8 Link Attributes
 
 - **Name**: `link_attributes`
-- **Path**: `<level>/link_attributes/<name>/<delta>/<i.j.k>`.
-- **Payload**: row-aligned to `links/<delta>/<i.j.k>`.  One row per
-  link record.  Shape `(M_k,)` or `(M_k, C)`.
-- **`.zattrs`**: same shape as [§7.2](#72-vertex-attributes).
+- **Path**: `<level>/link_attributes/<name>/<delta>/<offsets>`, one
+  cell per spatial chunk.  `link_attributes/<name>/<delta>` is a
+  **group** mirroring `links/<delta>`.
+- **Payload**: a flat dense blob, row-aligned to the link cell at the
+  same coordinate in the array with the same offsets segment.  One row
+  per link record, in the same order.  Shape `(M_k,)` or `(M_k, C)`.
+  There is no encoding branch — the record boundaries come from the
+  link array, so an attribute cell never needs its own framing.
+- **`.zattrs`**: family group `{"zv_array": "link_attribute_family",
+  "name": "<name>", "level_delta": <delta>}`; array `{"zv_array":
+  "link_attribute", "name": "<name>", "dtype": "<dtype>", "row_shape":
+  [] | [C], "offsets": [[...]], "level_delta": <delta>}`.
+- **Parity invariant**: for every populated attribute cell, its row
+  count equals the record count of the parallel link cell.  A
+  desynchronized write fails loudly at read time.
 - **Optional**: emitted only when the writer chose to carry per-link
   attributes; absent by default.
 
 ## 7.9 Cross-Chunk Link Attributes
 
-- **Name**: `cross_chunk_link_attributes`
-- **Path** (v0.8+): partitioned in lockstep with `cross_chunk_links/`:
-  `<level>/cross_chunk_link_attributes/<name>/<delta>/kK`.  One
-  attribute kN array per matching link kN array, with matching cell
-  coords.
-- **Per-cell payload**: one row per cross-chunk record in the
-  matching link cell, in record order.  Shape `(num_records_in_cell,)`
-  or `(num_records_in_cell, C)` for multi-channel attributes; packed
-  as vlen-bytes per cell.
-- **Parent-group `.zattrs`**: `{"zv_array": "cross_chunk_link_attribute",
-  "name": "<name>", "dtype": "<dtype>", "level_delta": <delta>,
-  "shape": null or [C], "layout": "sharded_v1"}`.  `num_links` is
-  no longer stored anywhere.
-- **Per-cell parity invariant**: for every populated attribute cell,
-  its record count equals the parallel
-  `cross_chunk_links/<delta>/kK` cell's record count at the same
-  cell coord.  A desynchronized write fails loudly at read time.
+*Merged into `link_attributes` in v0.9.*  There is no
+`cross_chunk_link_attributes` array.
+
+Attributes of a link that crosses a chunk boundary live in
+`link_attributes/<name>/<delta>/<offsets>` ([§7.8](#78-link-attributes))
+at the non-zero offsets segment, exactly as attributes of an
+intra-chunk link live at the all-zero one.  One attribute family
+mirrors the one link family, segment for segment and cell for cell.
 
 ## 7.10 Object Attributes
 
 - **Name**: `object_attributes`
-- **Path**: `<level>/object_attributes/<name>/data` (single blob per
-  attribute).
+- **Path**: `<level>/object_attributes/<name>` — a single dense array
+  per attribute.  (Before 0.8.1 this was a group wrapping a `data`
+  blob.)
 - **Payload**: dense per-object rows in object_id order, shape
   `(B,)` or `(B, C)`.  No fragment-indexing — the array is keyed by
-  the same OID space as `object_index/`.
-- **`.zattrs`**: standard attribute schema (`name`, `dtype`, `shape`,
-  optional `channel_names`).
+  the same OID space as `object_index/`.  Rows are chunked at 65 536.
+- **Absence is in-band**: an object with no value for this attribute
+  reads back as the array's `fill_value` — NaN for floats, the dtype
+  minimum for signed integers, the dtype maximum for unsigned, the
+  empty string for text.  The sibling `present_mask` array used before
+  0.8.1 is gone.
+- **`.zattrs`**: `{"zv_array": "object_attribute", "name": "<name>",
+  "dtype": "<dtype>", "shape": [...], "fill_sentinel_meaning":
+  "absent"}`, plus optional `channel_names`.
 
 ## 7.11 Fragment Attributes
 
 - **Name**: `fragment_attributes`
-- **Path**: `<level>/fragment_attributes/<name>/<i.j.k>`.
-- **Payload**: raw little-endian rows, row-aligned to fragments in
-  `vertex_fragments/<i.j.k>`.  Shape per chunk is `(F_k,)` for a
-  scalar attribute or `(F_k, C)` for a multi-channel attribute (`C`
-  declared in `.zattrs`), where `F_k` is the chunk's `num_fragments`
-  carried in the [§7.3](#73-vertex-fragments) fragment-index header.
+- **Path**: `<level>/fragment_attributes/<name>`, one cell per spatial
+  chunk.
+- **Payload**: raw little-endian rows, row-aligned to the fragments of
+  the `vertex_fragments` cell at the same coordinate.  Shape per chunk
+  is `(F_k,)` for a scalar attribute or `(F_k, C)` for a multi-channel
+  attribute (`C` declared in `.zattrs`), where `F_k` is the chunk's
+  `num_fragments`.
+- **Row count is self-describing**: `F_k` is derived from the cell's
+  own byte length, `len(cell) / (itemsize * ncols)` — a reader does
+  **not** need to decode [§7.3](#73-vertex-fragments) to size this
+  array.  A byte length that is not an exact multiple of the row
+  stride is an error, not a truncation.
 - **`.zattrs`**: `{"zv_array": "fragment_attribute", "name": "<name>",
-  "dtype": "<dtype>", "shape": [...]}`.  The optional `channel_names`
-  / `channel_dtype` fields describe per-channel labels for multi-channel
-  attributes.
+  "dtype": "<dtype>", "row_shape": [] | [C]}`.  The optional
+  `channel_names` / `channel_dtype` fields describe per-channel labels
+  for multi-channel attributes.
 - **Optional**: emitted only when the writer chose to carry per-fragment
-  attributes; absent by default.
-- **Selective access**: a reader fetches only the
-  `fragment_attributes/<name>/<i.j.k>` chunks it needs; chunk listings
-  are O(non-empty-chunks).
+  attributes; absent by default.  A common use is materializing parent
+  IDs — an `object_id` fragment attribute carrying the OID that owns
+  each fragment.
+- **Selective access**: a reader fetches only the cells it needs, and
+  enumerates occupied cells from `nonempty_chunks` in O(1).

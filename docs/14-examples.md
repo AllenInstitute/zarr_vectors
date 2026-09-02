@@ -32,29 +32,24 @@ mouse_brain_nuclei.zarr/
 ├── 0/
 │   ├── zarr.json                          # zarr_vectors_level
 │   ├── vertices/
-│   │   ├── zarr.json
-│   │   ├── 0.0.0
-│   │   ├── 0.0.1
-│   │   └── …
+│   │   ├── zarr.json                      # nonempty_chunks, chunk_grid_origin
+│   │   └── c/
+│   │       ├── 0/0/0
+│   │       ├── 0/0/1
+│   │       └── …
 │   ├── vertex_fragments/
 │   │   ├── zarr.json                      # zv_array = "vertex_fragments"
-│   │   ├── 0.0.0
-│   │   └── …
+│   │   └── c/0/0/0, …
 │   ├── vertex_attributes/
 │   │   └── volume/
 │   │       ├── zarr.json                  # µm³ per nucleus
-│   │       ├── 0.0.0
-│   │       └── …
+│   │       └── c/0/0/0, …
 │   ├── object_index/
-│   │   ├── zarr.json
-│   │   └── data                           # one manifest per nucleus
-│   ├── groups/
-│   │   ├── zarr.json
-│   │   └── data                           # G regions → object id lists
+│   │   ├── zarr.json                      # layout = "vlen_manifests_v1"
+│   │   └── manifests                      # one manifest blob per nucleus
+│   ├── groups                             # G regions → object id lists
 │   └── group_attributes/
-│       └── region_name/
-│           ├── zarr.json
-│           └── data                       # (G,) — "cortex", "hippocampus", …
+│       └── region_name                    # (G,) — "cortex", "hippocampus", …
 ├── 1/                                     # coarser pyramid level
 │   ├── zarr.json                          # may carry bin_shape and/or chunk_shape
 │   ├── vertices/
@@ -62,9 +57,9 @@ mouse_brain_nuclei.zarr/
 │   ├── vertex_attributes/
 │   │   └── volume/
 │   ├── object_index/                      # preserves_object_ids = true
-│   ├── groups/                            # same membership, same OID space
+│   ├── groups                             # same membership, same OID space
 │   └── group_attributes/
-│       └── region_name/
+│       └── region_name
 └── 2/
     └── …                                  # further downsampled for coarse preview
 ```
@@ -73,7 +68,7 @@ mouse_brain_nuclei.zarr/
 
 ```json5
 {
-  "zv_version": "0.7.0",
+  "zv_version": "0.9.0",
   "chunk_shape": [200.0, 200.0, 200.0],
   "bounds": [[0,0,0],[1000,1000,1000]],
   "geometry_types": ["point_cloud"],
@@ -97,7 +92,7 @@ mouse_brain_nuclei.zarr/
   `(start, 1)` whose `start` is the nucleus's row index in
   `vertices/<chunk>`.  The fragment count per chunk equals the
   nucleus count for that chunk.  The fragment index is what lets
-  the `object_index/data` manifest reference a nucleus by chunk-local
+  the `object_index/manifests` blob reference a nucleus by chunk-local
   position without writing global vertex IDs anywhere; it's a small
   cost (header + bitmap + range table, no CSR) and is what a reader
   uses to translate `(chunk_coords, fragment_index)` from a manifest
@@ -140,46 +135,36 @@ drosophila_central_complex_mesh.zarr/
 ├── zarr.json
 ├── 0/
 │   ├── zarr.json                          # chunk_shape inherits root
-│   ├── vertices/                          # Draco-encoded vertex chunks
+│   ├── vertices/                          # Draco-encoded vertex cells
 │   │   ├── zarr.json                      # encoding = "draco"
-│   │   ├── 0.0.0
-│   │   └── …
+│   │   └── c/0/0/0, …
 │   ├── vertex_fragments/
 │   │   ├── zarr.json
-│   │   ├── 0.0.0
-│   │   └── …
+│   │   └── c/0/0/0, …
 │   ├── links/
-│   │   └── 0/                             # triangle faces (link_width = 3)
-│   │       ├── zarr.json                  # link_width = 3, level_delta = 0
-│   │       ├── 0.0.0
-│   │       └── …
-│   ├── link_fragments/
+│   │   └── 0/                             # GROUP — link_width = 3
+│   │       ├── zarr.json                  # link_width = 3, directed = true
+│   │       ├── 0.0.0_0.0.0/               # faces inside one chunk
+│   │       │   └── c/0/0/0, …
+│   │       ├── 0.0.+1_0.0.+1/             # faces straddling the +z seam
+│   │       │   └── c/0/0/0, …
+│   │       └── 0.0.+1_0.+1.0/             # faces spanning three chunks
+│   │           └── c/0/0/0, …
+│   ├── link_fragments/                    # partitions links/0/0.0.0_0.0.0 only
 │   │   ├── zarr.json
-│   │   ├── 0.0.0
-│   │   └── …
-│   ├── object_index/
-│   │   ├── zarr.json
-│   │   └── data
-│   └── cross_chunk_links/
-│       └── 0/                             # cross-chunk faces (link_width = 3)
-│           ├── zarr.json                  # layout = "sharded_v1"
-│           ├── k2/                        # faces spanning 2 chunks
-│           └── k3/                        # faces spanning 3 chunks
+│   │   └── c/0/0/0, …
+│   └── object_index/
+│       ├── zarr.json
+│       └── manifests
 ├── 1/                                     # chunk_shape = 2× root per axis
 │   ├── zarr.json                          # zarr_vectors_level.chunk_shape set
 │   ├── vertices/
 │   ├── vertex_fragments/
 │   ├── links/
 │   │   ├── 0/                             # same-level faces at level 1
+│   │   │   └── 0.0.0_0.0.0/, 0.0.+1_0.0.+1/, …
 │   │   ├── +1/                            # OPTIONAL: fine→coarse mapping
 │   │   └── -1/                            # OPTIONAL: explicit storage only
-│   ├── cross_chunk_links/
-│   │   ├── 0/                             # kN arrays per delta
-│   │   │   ├── k2/, k3/
-│   │   │   └── zarr.json
-│   │   └── +1/
-│   │       ├── k2/, k3/
-│   │       └── zarr.json
 │   └── object_index/
 └── 2/                                     # chunk_shape = 4× root per axis
     └── …
@@ -192,9 +177,7 @@ drosophila_central_complex_mesh.zarr/
   "level": 1,
   "vertex_count": 24310,
   "arrays_present": ["vertices","vertex_fragments","links","link_fragments",
-                     "object_index","cross_chunk_links"],
-  "bin_shape": [400.0, 400.0, 400.0],
-  "bin_ratio": [2, 2, 2],
+                     "object_index"],
   "chunk_shape": [400.0, 400.0, 400.0],
   "object_sparsity": 1.0,
   "coarsening_method": "manual",
@@ -202,23 +185,33 @@ drosophila_central_complex_mesh.zarr/
 }
 ```
 
+`bin_shape` and `bin_ratio` do **not** appear here: they live in this
+level's NGFF `coordinateTransformations` entry as `translation × 2` and
+`scale` respectively (see [§9.3](09-multi-resolution-support.md#93-spatial-chunk-scaling-v07)).
+`arrays_present` lists family names only.
+
 **Notes**:
 
 - `vertex_fragments`: each mesh "fragment" is one Draco-encoded
   per-chunk piece of the mesh; one fragment per chunk in the typical
   case.  Explicit fragments allow vertex re-use across fragments
   when meshes share rims.
-- `links/0/`: triangle faces, `link_width = 3`.  `link_fragments/`
-  partitions the faces by vertex fragment.
-- `cross_chunk_links/0/`: triangle faces whose three vertices live
-  in distinct chunks.
+- `links/0/0.0.0_0.0.0/`: triangle faces wholly inside one chunk,
+  `link_width = 3`.  `link_fragments` partitions those faces by vertex
+  fragment.
+- `links/0/0.0.+1_0.0.+1/` and friends: faces whose vertices live in
+  distinct chunks.  Same family, same record shape — only the offsets
+  segment differs.
 - **v0.7 chunk-scale growth**: level 1's chunks are `2³` × coarser
   bin-shape than level 0's, but the grids nest exactly: a level-0
   chunk `(2,3,4)` lives inside the level-1 chunk `(1,1,2)`.
-- `links/+1/`, `cross_chunk_links/+1/`: optional fine→coarse mapping
-  per [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional).  A `+1` record at level 0 carries `(chunk_0, vi_0)` at
-  level 0 and `(chunk_1, vi_1)` at level 1 — the chunk coords differ
-  because of chunk-scale growth.
+- `links/+1/`: optional fine→coarse mapping per
+  [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional).
+  A `+1` record sits in its source chunk's cell at level 0, and its
+  offsets locate the level-1 endpoint relative to that chunk
+  **re-anchored into the level-1 grid** — which is what keeps
+  chunk-scale growth from scattering one physical relationship across
+  many offsets segments.
 
 ---
 
@@ -246,27 +239,21 @@ mouse_cortex_skeletons.zarr/
 │   │   ├── 2.1.0                          # one fragment per neuron piece in this chunk
 │   │   └── …
 │   ├── links/
-│   │   └── 0/
-│   │       ├── zarr.json                  # link_width = 1, branch links only
-│   │       ├── 2.1.0
-│   │       └── …
-│   ├── link_fragments/
-│   │   ├── 2.1.0
-│   │   └── …
+│   │   └── 0/                             # GROUP — link_width = 2, directed = true
+│   │       ├── zarr.json                  # branch links only (implicit sequential)
+│   │       ├── 0.0.0/                     # parent→child inside one chunk
+│   │       │   └── c/2/1/0, …
+│   │       └── 0.0.+1/                    # parent→child crossing the +z seam
+│   │           └── c/2/1/0, …
+│   ├── link_fragments/                    # partitions links/0/0.0.0 only
+│   │   └── c/2/1/0, …
 │   ├── vertex_attributes/
-│   │   ├── vertex_type/
-│   │   │   ├── 2.1.0
-│   │   │   └── …                          # 0=soma, 1=axon, 2=dendrite
-│   │   └── radius/
-│   │       ├── 2.1.0
-│   │       └── …                          # µm
-│   ├── object_index/
-│   │   └── data                           # B = number of neurons
-│   └── cross_chunk_links/
-│       └── 0/
-│           ├── zarr.json                  # link_width = 2, layout = "sharded_v1"
-│           └── k2/                        # parent→child crossing a chunk seam;
-│                                          # one cell per sorted (parent_chunk, child_chunk) pair
+│   │   ├── vertex_type/                   # 0=soma, 1=axon, 2=dendrite
+│   │   │   └── c/2/1/0, …
+│   │   └── radius/                        # µm
+│   │       └── c/2/1/0, …
+│   └── object_index/
+│       └── manifests                      # B = number of neurons
 └── 1/
     └── …                                  # per-object pyramid; preserves_object_ids
 ```
@@ -286,20 +273,26 @@ mouse_cortex_skeletons.zarr/
 
 - **Implicit-sequential-with-branches** dramatically reduces link
   storage: a 10k-vertex neuron with 50 branches stores ~50 link
-  rows in `links/0/<chunk>` instead of ~10k.
+  rows in `links/0/0.0.0` instead of ~10k.  The convention applies to
+  the intra-chunk array only; a parent edge that leaves the chunk is
+  always written out.
 - **Per-chunk fragmentation**: one fragment per neuron-piece-in-chunk.
   Neuron 42 might own fragment 3 of chunk `2.1.0` and fragment 0 of
   chunk `2.1.1`.
 - **Object manifest** for neuron 42: two blocks —
   `(chunk=(2,1,0), mode=0, fragment_index=3)` and
-  `(chunk=(2,1,1), mode=0, fragment_index=0)`.
-- **Cross-chunk parent links**: a parent in chunk A, child in
-  chunk B → one record in the `cross_chunk_links/0/k2` cell at
-  coord `(min(A,B) - origin) ⧺ (max(A,B) - origin)`, with
-  `ci = (chunk_index_of_parent, chunk_index_of_child)` and
-  `vi = (parent_vi, child_vi)`.  The cell coord encodes both chunks
-  in sorted order; the `ci` permutation recovers which endpoint is
-  the parent vs child.
+  `(chunk=(2,1,1), mode=0, fragment_index=0)`, read from row 42 of
+  `object_index/manifests`.
+- **Cross-chunk parent links**: a parent in chunk `(2,1,0)` with its
+  child one step along `+z` → one record in the `links/0/0.0.+1` cell
+  at `(2,1,0)`, holding `(parent_vi, child_vi)`.  The child's chunk is
+  the cell plus the offset; both indices are local to their own chunk.
+  Because the family sets `directed = true`, parent→child order is
+  preserved verbatim and no permutation index is stored.
+- **`link_width = 2`, not 1.**  A bare `link_width = 1` parent
+  reference has no offsets to encode and so cannot name a second
+  chunk; it is the right shape for a cross-*level* pointer, not for a
+  parent edge that may cross a chunk seam.
 
 ---
 
@@ -316,20 +309,16 @@ retina_vessels_2d.zarr/
 ├── 0/
 │   ├── zarr.json
 │   ├── vertices/
-│   │   ├── 0.0
-│   │   └── …
+│   │   └── c/0/0, …
 │   ├── vertex_fragments/
-│   │   ├── 0.0
-│   │   └── …
+│   │   └── c/0/0, …
 │   ├── vertex_attributes/
-│   │   ├── radius/
-│   │   │   ├── 0.0
-│   │   │   └── …                          # µm
-│   │   └── vessel_type/
-│   │       ├── 0.0
-│   │       └── …                          # uint8: 0=artery, 1=vein, 2=capillary
+│   │   ├── radius/                        # µm
+│   │   │   └── c/0/0, …
+│   │   └── vessel_type/                   # uint8: 0=artery, 1=vein, 2=capillary
+│   │       └── c/0/0, …
 │   └── object_index/
-│       └── data
+│       └── manifests
 └── …
 ```
 
@@ -339,8 +328,8 @@ retina_vessels_2d.zarr/
   unless branches exist).
 - One object per vessel.  Manifest: one block per chunk the vessel
   passes through.
-- Per-vertex attributes (`radius`, `vessel_type`) row-aligned to
-  `vertices/<chunk>`.
+- Per-vertex attributes (`radius`, `vessel_type`) row-aligned to the
+  `vertices` cell at the same chunk coordinate.
 
 ---
 
@@ -357,14 +346,15 @@ cell_tracks_xyzt.zarr/
 ├── zarr.json                              # 4 space axes: x, y, z, t (t typed as "time")
 ├── 0/
 │   ├── zarr.json
-│   ├── vertices/
-│   │   ├── 0.0.0.0                        # (x,y,z,t) chunk
-│   │   ├── 0.0.0.1
-│   │   └── …
+│   ├── vertices/                          # 4-D chunk grid
+│   │   └── c/
+│   │       ├── 0/0/0/0                    # (x,y,z,t) chunk
+│   │       ├── 0/0/0/1
+│   │       └── …
 │   ├── vertex_fragments/
-│   │   └── …
+│   │   └── c/0/0/0/0, …
 │   └── object_index/
-│       └── data                           # one object = one track across t-chunks
+│       └── manifests                      # one object = one track across t-chunks
 └── …
 ```
 
@@ -392,35 +382,32 @@ merfish_celltype.zarr/
 ├── zarr.json
 ├── 0/
 │   ├── zarr.json
-│   ├── vertices/
-│   │   ├── 0.0
-│   │   └── …                              # cell positions (XY)
+│   ├── vertices/                          # cell positions (XY)
+│   │   └── c/0/0, …
 │   ├── vertex_fragments/
-│   │   └── …
+│   │   └── c/0/0, …
 │   ├── vertex_attributes/
 │   │   ├── gene_expression/               # multi-channel per cell
-│   │   │   ├── zarr.json                  # channel_names = ["GENE0", …]
-│   │   │   ├── 0.0
-│   │   │   └── …
-│   │   └── cell_type/
-│   │       ├── 0.0
-│   │       └── …                          # uint16 type id per cell
+│   │   │   ├── zarr.json                  # row_shape = [num_genes],
+│   │   │   │                              #   channel_names = ["GENE0", …]
+│   │   │   └── c/0/0, …
+│   │   └── cell_type/                     # uint16 type id per cell
+│   │       └── c/0/0, …
 │   ├── object_index/
-│   │   └── data                           # one object per cell
-│   ├── groups/
-│   │   └── data                           # G cell-type clusters
+│   │   └── manifests                      # one object per cell
+│   ├── groups                             # G cell-type clusters
 │   └── group_attributes/
-│       ├── cell_type_name/
-│       │   └── data
-│       └── super_type/
-│           └── data                       # e.g. "neuron", "glia"
+│       ├── cell_type_name
+│       └── super_type                     # e.g. "neuron", "glia"
 └── …
 ```
 
 **Notes**:
 
 - **gene_expression** is stored as one multi-channel attribute (one
-  blob per chunk, shape `(N_chunk, num_genes)`).  When the gene
+  cell per chunk, shape `(N_chunk, num_genes)`).  `row_shape` on the
+  array carries the column count, so the attribute reads back at its
+  true width whether or not `channel_names` is present.  When the gene
   count is large enough that channel-axis chunking is desirable,
   the store rechunks along the gene axis using `chunk_dims =
   ["gene","dim0","dim1"]` with per-bin `chunk_attribute_values`
@@ -443,25 +430,21 @@ mfish_spots_cells.zarr/
 ├── zarr.json
 ├── 0/
 │   ├── zarr.json
-│   ├── vertices/
-│   │   ├── 0.0.0
-│   │   └── …                              # XYZ position per spot
+│   ├── vertices/                          # XYZ position per spot
+│   │   └── c/0/0/0, …
 │   ├── vertex_fragments/
-│   │   └── …
+│   │   └── c/0/0/0, …
 │   ├── vertex_attributes/
 │   │   ├── gene_id/                       # which transcript
 │   │   ├── intensity/                     # fluorescence
 │   │   └── round/                         # imaging round
 │   ├── object_index/
-│   │   └── data                           # one object per cell; each cell
+│   │   └── manifests                      # one object per cell; each cell
 │   │                                       # spans many fragments / chunks
 │   ├── object_attributes/
-│   │   ├── cell_type/
-│   │   │   └── data
-│   │   └── centroid/
-│   │       └── data                       # (B, 3)
-│   └── groups/
-│       └── data                           # optional cell-type clusters
+│   │   ├── cell_type                      # (B,)
+│   │   └── centroid                       # (B, 3)
+│   └── groups                             # optional cell-type clusters
 └── …
 ```
 
@@ -470,8 +453,10 @@ mfish_spots_cells.zarr/
 - A cell that spans chunks gets one manifest block per chunk; within
   a chunk the spots belonging to that cell can be a range (mode 1)
   if writer ordering allowed, or an explicit list (mode 2) otherwise.
-- `object_attributes/centroid/data` is `(B, 3)` — pre-computed per-cell
+- `object_attributes/centroid` is `(B, 3)` — pre-computed per-cell
   summaries so a viewer can render cells without fetching every spot.
+  A cell with no centroid reads back as the array's `fill_value`
+  (NaN here), not as a zero row.
 
 ---
 
@@ -490,9 +475,9 @@ to simplify conversion and interoperability.
 | `positions` (NB_VERTICES × 3)        | `vertices` (single chunk)                                    |
 | `offsets` (streamline start indices) | `vertex_fragments/<chunk>` (one fragment per streamline)     |
 | `dpv` (data_per_vertex)              | `vertex_attributes/<name>/<chunk>`                           |
-| `dps` (data_per_streamline)          | `object_attributes/<name>/data`                              |
-| `groups` (AF_L.uint32, …)            | `groups/data` (object IDs per tract)                         |
-| `dpg` (data_per_group)               | `group_attributes/<name>/data`                               |
+| `dps` (data_per_streamline)          | `object_attributes/<name>`                                   |
+| `groups` (AF_L.uint32, …)            | `groups` (object IDs per tract)                              |
+| `dpg` (data_per_group)               | `group_attributes/<name>`                                    |
 | `header.json`                        | root `zarr.json` (axes, CRS, transforms)                     |
 
 **Directory structure**:
@@ -504,44 +489,37 @@ dti_small.trx.zarr/
 └── 0/
     ├── zarr.json
     ├── vertices/
-    │   └── 0                              # all positions in one chunk
+    │   └── c/0/0/0                        # all positions in one cell
     ├── vertex_fragments/
-    │   └── 0                              # one fragment per streamline,
+    │   └── c/0/0/0                        # one fragment per streamline,
     │                                       # ranges = TRX offsets
     ├── vertex_attributes/
     │   ├── fa/
-    │   │   └── 0
-    │   └── color/
-    │       └── 0                          # (NB_VERTICES, 3) uint8
+    │   │   └── c/0/0/0
+    │   └── color/                         # (NB_VERTICES, 3) uint8
+    │       └── c/0/0/0
     ├── object_attributes/
-    │   ├── algo/
-    │   │   └── data
-    │   ├── clusters_QB/
-    │   │   └── data
-    │   └── commit_weights/
-    │       └── data
-    ├── groups/
-    │   └── data                           # G tracts → streamline (object) ids
+    │   ├── algo
+    │   ├── clusters_QB
+    │   └── commit_weights
+    ├── groups                             # G tracts → streamline (object) ids
     └── group_attributes/
-        ├── tract_name/
-        │   └── data                       # AF_L, AF_R, …
-        ├── mean_fa/
-        │   └── data                       # (G,)
-        ├── shuffle_colors/
-        │   └── data                       # (G, 3)
-        └── volume/
-            └── data                       # (G,) uint32
+        ├── tract_name                     # AF_L, AF_R, …
+        ├── mean_fa                        # (G,)
+        ├── shuffle_colors                 # (G, 3)
+        └── volume                         # (G,) uint32
 ```
 
 **Notes**:
 
-- **Single chunk**: `chunk_shape` covers the entire bounding box;
-  every array has one chunk key `0` (or `0.0.0` for 3-D).
+- **Single chunk**: `chunk_shape` covers the entire bounding box, so
+  every per-chunk array has grid shape `(1, 1, 1)` and exactly one
+  cell, at `c/0/0/0`.
 - **Identity convention**: `object_index/` omitted; object IDs
   equal fragment indices within the single chunk.
-- **Implicit-sequential links**: no `links/` array.  Streamlines are
-  recovered by reading the per-streamline fragment from
-  `vertex_fragments/0` and walking vertex rows in order.
+- **Implicit-sequential links**: no `links/` group at all.
+  Streamlines are recovered by reading the per-streamline fragment
+  from the `vertex_fragments` cell and walking vertex rows in order.
 - **No vertex_fragments range-table optimization needed**: each
   TRX-style offset becomes one range fragment `(start, count)`.
 
@@ -567,42 +545,36 @@ dti_tracts.zarr/
 ├── zarr.json                              # cross_level_storage = "implicit"
 ├── 0/
 │   ├── zarr.json
-│   ├── vertices/
-│   │   ├── 0.0.0
-│   │   └── …                              # ordered points per segment
-│   ├── vertex_fragments/
-│   │   ├── 0.0.0
-│   │   └── …                              # one fragment per shared segment,
-│   │                                       # references via explicit indices
+│   ├── vertices/                          # ordered points per segment
+│   │   └── c/0/0/0, …
+│   ├── vertex_fragments/                  # one fragment per shared segment,
+│   │   └── c/0/0/0, …                     #   references via explicit indices
+│   ├── links/
+│   │   └── 0/                             # GROUP — link_width = 2, directed
+│   │       ├── 0.0.+1/                    # segment-end → next segment-start,
+│   │       │   └── c/0/0/0, …             #   one array per seam direction
+│   │       ├── 0.+1.0/
+│   │       └── +1.0.0/
 │   ├── object_index/
-│   │   └── data                           # one object per full streamline;
+│   │   └── manifests                      # one object per full streamline;
 │   │                                       # manifest chains segments by chunk
 │   ├── object_attributes/
-│   │   └── termination/
-│   │       └── data                       # (B, 2): source / sink region ids
-│   ├── groups/
-│   │   └── data                           # G tracts → streamline IDs
-│   ├── group_attributes/
-│   │   └── tract_name/
-│   │       └── data
-│   └── cross_chunk_links/
-│       └── 0/
-│           ├── zarr.json
-│           └── k2/                        # segment-end in chunk A → segment-start in chunk B
-│                                          # one cell per (sorted A, B) pair (v0.8 layout)
+│   │   └── termination                    # (B, 2): source / sink region ids
+│   ├── groups                             # G tracts → streamline IDs
+│   └── group_attributes/
+│       └── tract_name
 ├── 1/                                     # chunk_shape grows ×2 per axis
 │   ├── zarr.json                          # zarr_vectors_level.chunk_shape set
 │   ├── vertices/                          # fewer points per streamline
 │   ├── vertex_fragments/
-│   ├── links/                             # OPTIONAL fine→coarse mapping
-│   │   └── +1/                            # emitted because cross_level_storage = "implicit"
+│   ├── links/
+│   │   ├── 0/                             # same-level continuations
+│   │   └── +1/                            # OPTIONAL fine→coarse mapping;
+│   │                                       #   cross_level_storage = "implicit"
 │   ├── object_index/                      # preserves_object_ids = true
 │   ├── object_attributes/
-│   ├── groups/
-│   ├── group_attributes/
-│   └── cross_chunk_links/
-│       ├── 0/k2/                          # same-level continuations
-│       └── +1/k2/                         # OPTIONAL: cross-chunk fine→coarse
+│   ├── groups
+│   └── group_attributes/
 └── 2/
     └── …
 ```
@@ -611,7 +583,7 @@ dti_tracts.zarr/
 
 ```json5
 {
-  "zv_version": "0.7.0",
+  "zv_version": "0.9.0",
   "geometry_types": ["streamline"],
   "links_convention": "implicit_sequential",
   "object_index_convention": "standard",
@@ -619,8 +591,7 @@ dti_tracts.zarr/
   "cross_level_storage": "implicit",
   "cross_level_depth": 1,
   "format_capabilities": ["fragment_index","shared_fragments",
-                          "preserved_object_ids","multiscale_links",
-                          "partitioned_cross_chunk_links"]
+                          "preserved_object_ids","multiscale_links"]
 }
 ```
 
@@ -632,15 +603,17 @@ dti_tracts.zarr/
   shared fragment indices that make up a streamline within that
   chunk.
 - **Cross-chunk continuation**: each segment-end → next-segment-start
-  is one record in the `cross_chunk_links/0/k2` cell at coord
-  `(min(A,B) - origin) ⧺ (max(A,B) - origin)` (`link_width = 2`,
-  18 bytes per record).
+  is one `link_width = 2` record in the `links/0/<offsets>` array for
+  that seam direction, written to the source chunk's cell.  With
+  `directed = true` the along-path order is preserved and no
+  permutation index is stored, so a record is two chunk-local vertex
+  indices and nothing else.
 - **v0.7 chunk-scale growth**: level 1's `chunk_shape` is 2× root
   per axis; per-chunk fragment counts stay bounded as the pyramid
   decimates.
-- **Implicit cross-level storage**: only `links/+1/` and
-  `cross_chunk_links/+1/` are emitted (at the finer level).
-  Coarse → fine inversion is computed at read time.
+- **Implicit cross-level storage**: only the `links/+1/` arrays are
+  emitted, at the finer level.  Coarse → fine inversion is computed at
+  read time.
 
 ---
 
@@ -651,24 +624,26 @@ same store (many workers tracing neurons in different tiles).
 
 **Considerations** (same layout as 14.3):
 
-- **Chunk-local writes are independent**: each chunk's
-  `vertices/<chunk>`, `vertex_fragments/<chunk>`,
-  `links/0/<chunk>`, `link_fragments/<chunk>`, and
-  `vertex_attributes/<name>/<chunk>` blobs can be authored without
-  coordinating fragment numbering with any other chunk.
-- **Global arrays need coordination**: `object_index/data` and
-  `groups/data` are level-global byte blobs.  Writers either serialize
-  updates or use a transactional backend (e.g. icechunk) that supports
-  atomic multi-blob commits.
-- **Cross-chunk-link writes (v0.8 sharded layout)** are partitioned
-  across the `cross_chunk_links/<delta>/kK` sharded vlen-bytes arrays.
-  Cells covering different outer shards are independent and can be
-  appended without affecting other shards.  Concurrent writers
-  touching cells in different shards don't need any coordination
-  beyond what zarr already provides per shard file.  Writers touching
-  the same outer shard still need ordering for append safety —
-  shard_size defaults to 4 cells per axis, so `4^(sid_ndim * K)`
-  cells share one shard.
+- **Chunk-local writes are independent**: each chunk's cell in
+  `vertices`, `vertex_fragments`, `links/0/<offsets>`,
+  `link_fragments`, and `vertex_attributes/<name>` can be authored
+  without coordinating fragment numbering with any other chunk.  Every
+  cell is its own chunk file.
+- **Presence is shared state**: `nonempty_chunks` is one attribute on
+  the whole array, so independent per-cell writers must not each
+  update it.  They write cells without recording presence, and a
+  coordinator derives the attribute in one pass afterwards.
+- **Global arrays need coordination**: `object_index/manifests` and
+  `groups` are level-global.  Writers either serialize updates or use
+  a transactional backend (e.g. icechunk) that supports atomic
+  multi-blob commits.
+- **Sharding changes the unit of contention.**  Unsharded, two writers
+  touching different cells never conflict.  Sharded, the shard file is
+  the unit of atomicity: writers in different shards are still
+  independent, but two writers in the same shard must serialize.
+- **Finalize before sharding**: link record counts must be written
+  before the store is sharded, because a shard's inner index is not
+  derivable from chunk-file names once the cells are packed.
 - **Capability flags**: stores that allow segment reuse advertise
   `shared_fragments`; OID-preserving pyramids built on top of these
   stores additionally advertise `preserved_object_ids`.

@@ -23,33 +23,36 @@ warnings, and errors per check.
 Within each level, the implementation runs a fixed battery of checks.
 A representative (non-exhaustive) sample:
 
-- **Structural**: every present array group has a `zarr.json` with a
-  recognized `"zv_array"` discriminator; chunk keys are valid
-  N-tuples of non-negative integers; the manifest blob `object_index/
-  data` decodes without truncation.
-- **Metadata**: `zv_version >= "0.8.0"`; `chunk_shape` length matches
+- **Structural**: every present array or group has a `zarr.json` with
+  a recognized `"zv_array"` discriminator; every name under a
+  `links/<delta>/` or `link_attributes/<name>/<delta>/` group parses
+  as a valid offsets segment for the family's `link_width` and
+  `sid_ndim`; `chunk_grid_origin`, where present, has `sid_ndim`
+  entries; `object_index/manifests` decodes without truncation.
+- **Metadata**: `zv_version >= "0.9.0"`; `chunk_shape` length matches
   `sid_ndim`; `links_convention`, `object_index_convention`,
   `cross_chunk_strategy`, `cross_level_storage` are in the canonical
   enumerations; `format_capabilities` tokens are recognized
   (`fragment_index`, `shared_fragments`, `preserved_object_ids`,
-  `multiscale_links`, `partitioned_cross_chunk_links`).  Any
-  `cross_chunk_links/<delta>/` group's `.zattrs.layout` equals
-  `"sharded_v1"`; if `cross_chunk_links/<delta>/` exists then
-  root `format_capabilities` carries both `multiscale_links` and
-  `partitioned_cross_chunk_links`.
-- **Consistency**: every per-chunk `vertex_fragments/<chunk>` decodes
-  to a `FragmentIndex` whose ranges land within `vertices/<chunk>`
-  row bounds; manifest blocks reference fragments that exist.  For
-  every populated cell of `cross_chunk_links/<delta>/kK`: cell-payload
-  byte length is a multiple of `9 * link_width`; every record's
-  `ci` values are in `[0, K-1]` and their set covers `{0..K-1}`
-  (coverage invariant); for `delta=0, L=2` cells every record has
-  `ci = [0, 1]` (canonical undirected); the K chunk segments in the
-  cell coord are in strict lex order; each cell-listed chunk exists
-  at the relevant level for the endpoints that reference it.  For
-  every parallel `cross_chunk_link_attributes/<name>/<delta>/kK` cell
-  at the matching cell coord, record count equals the link cell's
-  count.
+  `multiscale_links`).  `object_index`'s `layout` equals
+  `"vlen_manifests_v1"`.  A store carrying the retired
+  `partitioned_cross_chunk_links` token, a `cross_chunk_links/` group,
+  or `layout = "sharded_v1"` is a pre-0.9 store and MUST be rejected
+  rather than partially read ([§10.9](10-cross-chunk-linking.md#109-migration-to-v09)).
+- **Consistency**: every `vertex_fragments` cell decodes to a
+  `FragmentIndex` whose ranges land within the row bounds of the
+  `vertices` cell at the same coordinate; manifest blocks reference
+  fragments that exist; `nonempty_chunks` agrees with the cells
+  actually present.  For every populated link cell: row width is
+  `link_width + (1 if has_perm else 0)` and the byte length is an
+  exact multiple of one row; `has_perm` equals what the family policy
+  implies ([§10.6.5](10-cross-chunk-linking.md#1065-whether-a-permutation-index-is-present));
+  every `vi_k` is within the vertex count of chunk `src + o_k`, and
+  that chunk exists at the endpoint's level.  The all-zero offsets
+  array at `delta = 0` has a `link_fragments` cell for every cell it
+  populates, and no other array has one.  For every parallel
+  `link_attributes/<name>/<delta>/<offsets>` cell at the matching
+  coordinate, row count equals the link cell's record count.
 - **Conformance**: geometry-specific rules from
   `GEOMETRY_LINK_REQ` — e.g. `mesh` requires
   `links_convention == "explicit"`; `streamline` requires
@@ -69,7 +72,7 @@ A representative (non-exhaustive) sample:
   External tools may generate JSON Schema / Pydantic / SQLAlchemy
   artifacts from it.
 - **Error reporting**: each result entry is a single-line string
-  identifying the level prefix (`resolution_<n>:`), the array or
+  identifying the level (`<n>:`), the array or
   chunk involved, and the failure mode.
 
 ## 13.4 Compatibility
