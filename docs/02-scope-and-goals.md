@@ -56,9 +56,9 @@ This use case demonstrates organizing meshes into spatially divided sections wit
 This use case demonstrates storing neuronal skeletons with spatial organization:
 
 - **Breaking skeletons into spatial buckets**: Skeletons are divided into spatial regions
-- **Repeating vertices at border** *(optional)*: under `cross_chunk_strategy = "boundary_deduplication"`, vertices on chunk boundaries are duplicated.  The default strategy (`explicit_links`) instead writes records into the `cross_chunk_links/0/kK` sharded vlen-bytes arrays and keeps vertices unique.
+- **Repeating vertices at border** *(optional)*: under `cross_chunk_strategy = "boundary_deduplication"`, vertices on chunk boundaries are duplicated.  The default strategy (`explicit_links`) instead writes records into the `links/0/<offsets>` arrays at a non-zero offsets segment and keeps vertices unique.
 - **Appending vertices and fragment-index entries**: new skeleton fragments can be incrementally added to a chunk without rewriting other chunks
-- **Adding parent indices**: parent-child relationships are stored under `links/0/<chunk>` (`link_width = 1`); under `links_convention = "implicit_sequential_with_branches"` only branch links are materialised
+- **Adding parent indices**: parent-child relationships are stored in the `links/0/` family (`link_width = 2` when an edge may cross a chunk seam, `1` for a bare in-chunk reference); under `links_convention = "implicit_sequential_with_branches"` only branch links are materialised
 - **Adding vertex properties**: Properties like radius and compartment are stored per vertex
 - **Reconstructing entire skeleton**: Complete skeletons can be reconstructed from distributed chunks
 

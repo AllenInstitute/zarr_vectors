@@ -1,7 +1,7 @@
 # Zarr Vectors Spec
 
 :::{image} _static/zarr-vectors-logo.png
-:alt: Zarr-vectors
+:alt: Zarr Vectors
 :width: 320px
 :align: center
 :::

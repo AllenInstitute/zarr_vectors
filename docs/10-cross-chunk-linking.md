@@ -1,4 +1,4 @@
-# 10. Cross-Chunk Linking
+# 10. Linking Across Chunks and Levels
 
 ## 10.1 Problem Statement
 
@@ -19,25 +19,19 @@ schema treats uniformly under one array family:
 - **Cross-pyramid-level links** between resolution levels
   (`delta ≠ 0`).  Endpoints at the source level paired with endpoints
   at `source + delta`.  When the coarse level also grows
-  `chunk_shape` (v0.7), the source-side chunk coord and target-side
-  chunk coord differ for the same physical region.
+  `chunk_shape`, the source-side chunk coord and target-side chunk
+  coord differ for the same physical region.
 
-Both kinds live under `cross_chunk_links/<delta>/` with identical
-record structure; the `level_delta` field in the array's `.zattrs`
-declares which case applies.
+Both kinds live under `links/<delta>/<offsets>/` with identical record
+structure; the `<delta>` path segment declares which case applies.
 
-Since **v0.8** the on-disk layout for this array family has been
-**partitioned by chunk**, with records stored in K-separated sharded
-vlen-bytes zarr arrays rather than a single flat int64 blob — see
-[§10.6](#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays).
-The motivation: a `link_width = 2`, `sid_ndim = 3` record under the
-v0.7 layout took 64 bytes (each endpoint's chunk coords baked into
-the payload) and the whole table lived in one int64 blob per
-`<delta>`, so every append rewrote the file and every "what records
-connect chunks A and B?" query scanned the whole array.  The
-partitioned layout drops the per-record cost to 18 bytes and turns
-that query into a single sharded zarr-array cell read; concurrent
-writers touching different shards no longer conflict.
+Connectivity is **one** array family, and **an intra-chunk link is
+simply a link whose relative offsets are all zero** — see
+[§10.6](#106-on-disk-layout-the-links-family).  Factoring the
+relationship between endpoints into the *path* rather than into the
+cell coordinate is what makes every link array an ordinary chunk-grid
+array: it shards, enumerates and validates exactly like `vertices`
+does, and a record never names a chunk at all.
 
 ## 10.2 Strategy 1: Boundary Deduplication
 
@@ -58,26 +52,29 @@ writers touching different shards no longer conflict.
 ![Toy Example of A 1d graph coarsening](images/multi-scale-coarsening.png)
 
 - **Principle**: each cross-chunk edge or face is written as one
-  record under `cross_chunk_links/<delta>/kK`, where `K` is the
-  number of **distinct** chunks the record touches, in a cell keyed
-  by the sorted-unique chunks (see
-  [§10.6](#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)).
+  record in `links/<delta>/<offsets>/`, in the cell of its **source**
+  chunk, where the `<offsets>` path segment says where the other
+  endpoints sit relative to that source (see
+  [§10.6](#106-on-disk-layout-the-links-family)).
 - **Setting**: `cross_chunk_strategy = "explicit_links"` (the
-  default).
-- **Record format**: see [§7.7](07-core-arrays.md#77-cross-chunk-links).  Each record carries `link_width`
-  `(chunk_index, local_vertex_index)` pairs.  `link_width = 2` is the
-  generic edge; `link_width = 3` is a triangle face; `link_width = 1`
-  is a single child reference (used by metanode drill-down).  The
-  chunk identity of each endpoint is recovered from the cell coord's
-  K sorted chunk-tuples and the endpoint's `chunk_index` into them —
-  no chunk coords appear in the record payload.
+  default).  The strategy tokens are semantic: they say how a writer
+  reconciles geometry that straddles a boundary, not where the records
+  are stored.
+- **Record format**: see [§7.5](07-core-arrays.md#75-vertex-links).
+  Each record carries `link_width` chunk-local vertex indices, one per
+  endpoint.  `link_width = 2` is the generic edge; `link_width = 3` is
+  a triangle face; `link_width = 1` is a single child reference (used
+  by metanode drill-down).  The chunk each endpoint lives in is
+  recovered from the cell coordinate plus the offsets segment — no
+  chunk coords appear in the record payload.
 - **Per-edge attributes** *(optional)*:
-  `cross_chunk_link_attributes/<name>/<delta>/kK` — parallel kN
-  sharded arrays with one row per record in the matching link cell.
+  `link_attributes/<name>/<delta>/<offsets>/` — the same offsets
+  segments over the same cells, one row per record in the matching
+  link cell.
 - **Advantages**: explicit, no coordinate matching needed, supports
   arbitrary `link_width`, scales to cross-pyramid-level links via
-  `delta ≠ 0`, and the partitioned layout makes "all records between
-  chunks A and B" a single sharded zarr-array cell read.
+  `delta ≠ 0`, and makes "all records leaving chunk A in direction d"
+  a single array-cell read.
 
 ## 10.4 Strategy Selection
 
@@ -93,468 +90,353 @@ Picking guidance:
 | Skeleton with strict integer voxel-coordinate vertices   | either; deduplication is simplest |
 | Streamline / polyline with float vertices                | `explicit_links`        |
 | Mesh with shared rim triangles                           | `explicit_links` (link_width=3) |
-| Any v0.7+ pyramid with chunk-scale growth                | `explicit_links` (required for cross-pyramid records) |
+| Any pyramid with chunk-scale growth                      | `explicit_links` (required for cross-pyramid records) |
 
 ## 10.5 Object Index for Cross-Chunk Objects
 
-When an object spans chunks, its `object_index/data` manifest carries
-one block per chunk it touches.  Each block names one chunk and a
-fragment reference (mode-0 / mode-1 / mode-2).  To reconstruct the
+When an object spans chunks, its manifest in `object_index/manifests`
+carries one block per chunk it touches.  Each block names one chunk and
+a fragment reference (mode-0 / mode-1 / mode-2).  To reconstruct the
 object, a reader:
 
-1. Reads the per-object manifest from `object_index/data`.
+1. Reads the object's manifest blob from `object_index/manifests` at
+   row `object_id`.
 2. For each block, decodes the named chunk's
    `vertex_fragments/<chunk>` to find which rows of
    `vertices/<chunk>` belong to the object.
-3. Optionally walks the per-pair leaves under `cross_chunk_links/0/`
-   to recover edges bridging the chunks.
+3. Optionally reads the non-intra offsets arrays under `links/0/` at
+   those chunks to recover edges bridging them.
 
-The manifest blocks do NOT themselves carry cross-chunk *edges* —
-they carry chunk + fragment references.  Edges across chunk seams
-are a separate concern handled by the per-pair leaves in
-`cross_chunk_links/0/`.
+The manifest blocks do NOT themselves carry cross-chunk *edges* — they
+carry chunk + fragment references.  A manifest references vertex
+fragments only.
 
-## 10.6 On-Disk Layout (K-Separated Sharded vlen-bytes Arrays)
+## 10.6 On-Disk Layout: The Links Family
 
-*Added in v0.8.*  Cross-chunk records are partitioned across
-**K-separated sharded vlen-bytes zarr Arrays**, one per distinct K
-(the number of unique chunks a record touches).  Records previously
-in a single monolithic int64 blob now live as cells of those arrays,
-keyed by the sorted-unique-chunks tuple.  Zarr v3's sharding codec
-packs many cells into one outer shard file so file count scales with
-data, not chunk-grid size.
+Connectivity is **one** array family: `links/<delta>/<offsets>/`, with
+`link_attributes/<name>/<delta>/<offsets>/` mirroring it.  An
+intra-chunk link is a link whose relative offsets are all zero.
 
 ### 10.6.1 Array tree
 
 ```
-/<level>/cross_chunk_links/<delta>/                       # parent group, .zattrs = layout
-    k1/                                                   # 3-D sharded vlen-bytes (sid_ndim dims)
-    k2/                                                   # 6-D (2*sid_ndim dims) — typical for edges
-    k3/                                                   # 9-D — only if needed (mesh faces in 3 chunks)
-    …                                                     # up to k{link_width}
-/<level>/cross_chunk_link_attributes/<name>/<delta>/      # parent group, .zattrs = layout
-    k1/, k2/, k3/, …                                      # parallel kN arrays mirroring CCL
+/<level>/links/<delta>/                              # GROUP  — family policy
+/<level>/links/<delta>/<offsets>/                    # ARRAY  — one per offsets segment
+/<level>/link_attributes/<name>/<delta>/             # GROUP  — mirrors the family
+/<level>/link_attributes/<name>/<delta>/<offsets>/   # ARRAY  — mirrors cell-for-cell
 ```
 
-- `K` is the number of **distinct** chunks the records in this array
-  touch.  `1 ≤ K ≤ link_width`.
-- Each `kK` array has shape `(Cx, Cy, Cz) * K` (or whatever
-  `sid_ndim`-dim extent the chunk grid has — concrete sizes are
-  declared on `kK.shape`).
-- Inner chunks are `(1,) * (sid_ndim * K)` — one cell per inner chunk.
-- Outer shards are `(4,) * (sid_ndim * K)` by default (tunable per
-  store) so `4^(sid_ndim*K)` cells pack into one shard file.
-- Lazy allocation: only `kK` arrays for K values that have records
-  exist on disk.
-- Each `kK` carries its own `chunk_origin` offset for stores whose
-  chunk coords go negative.
-- Zarr libraries handle the kN arrays as standard zarr Arrays;
-  navigating to a specific cell is
-  `root[level]["cross_chunk_links"][delta_segment]["k2"][a0, a1, a2, b0, b1, b2]`.
+Each `<offsets>` array is an ordinary per-chunk array in the sense of
+[§5.2](05-zarr-store-structure.md#52-zarr-version-requirements): a
+rank-`sid_ndim` vlen-bytes array over the level's chunk grid, one cell
+per spatial chunk, cell files at `c/<i>/<j>/<k>`, with
+`chunk_grid_origin` and `nonempty_chunks` attributes and optional
+sharding.  Because the relationship between endpoints is factored into
+the *path* rather than into the cell coordinate, link arrays shard and
+enumerate exactly like `vertices` does.
 
-### 10.6.2 Cell index encoding
+There is no array at `links/<delta>` itself — it is always a group.
 
-For a record whose sorted-unique chunks are
-`(chunk_sorted_0, …, chunk_sorted_{K-1})` (lex order, element-wise
-integer-tuple comparison), the cell coord in the `kK` array is the
-flat concatenation:
+### 10.6.2 The `<delta>` segment
 
-```
-cell_coord = (chunk_sorted_0 - origin) ⧺ … ⧺ (chunk_sorted_{K-1} - origin)
-```
+The signed pyramid-level delta, written `0`, `+N`, `-N`.  The leading
+`+` is preserved so a directory listing distinguishes positive deltas
+from the unsigned `0` at a glance.  It says how many pyramid levels the
+record spans: `0` is intra-level, `±N` reaches `N` levels coarser or
+finer.
 
-where `origin = kK.attrs.chunk_origin` (defaults to all-zero;
-non-zero only when bounds cover negative space so cell coords stay
-non-negative).
+### 10.6.3 The `<offsets>` segment
 
-### 10.6.3 Per-cell payload
+The offsets segment says where the record's *other* endpoints sit
+**relative to its source chunk**, which is the cell that holds it.  It
+carries `link_width - 1` offsets, each an `sid_ndim`-tuple of signed
+integers written with the same convention as the delta; components are
+joined by `.` and offsets by `_`.
 
-Each populated cell holds a ragged byte blob of fixed-size records:
+| Segment | `L` | Meaning |
+|---------|-----|---------|
+| `0.0.0` | 2 | intra-chunk edge — both endpoints in the source chunk |
+| `0.0.+1` | 2 | edge to the neighbour one chunk along `+z` |
+| `0.0.-1` | 2 | edge to the neighbour one chunk along `-z` |
+| `0.0.0_0.0.0` | 3 | intra-chunk triangle |
+| `0.0.+1_0.+1.0` | 3 | triangle spanning the source, `+z`, and `+y` |
+| `self` | 1 | `link_width == 1`; no other endpoint to locate |
 
-```
-cell = [ rec_0, rec_1, ..., rec_{N-1} ]                  # N records, back-to-back
-each record =
-  [ ci_0, ci_1, ..., ci_{L-1},        # L * uint8       (chunk-index per endpoint)
-    vi_0, vi_1, ..., vi_{L-1} ]       # L * int64       (vertex index, little-endian)
-  = 9 * L bytes per record
-```
+The implicit `o_0` — the source chunk itself, always zero — is never
+encoded.  Record component `vi_k` is a vertex row index **local to
+chunk `src + o_k`**.
 
-- `L = link_width`, declared on the `cross_chunk_links/<delta>/`
-  parent group `.zattrs` (uniform across all K-buckets).
-- `ci_i ∈ [0, K-1]` is endpoint `i`'s **chunk-index** — it picks one
-  of the K sorted-chunks in the cell coord; that's the chunk
-  endpoint `i` lives in.
-- `vi_i` is endpoint `i`'s **local vertex index** inside its chunk's
-  vertex array.
-- The two blocks are concatenated, all `L` chunk-indices first then
-  all `L` vertex indices.
+Directory-name invariants, which a reader MUST enforce:
 
-**Endpoint level convention** (unchanged): endpoint 0 lives at the
-**owning** resolution level — the level under whose
-`cross_chunk_links/<delta>/` parent group the kN array lives.
-Endpoints `1..L-1` live at `owning_level + level_delta`.
+1. The segment carries exactly `link_width - 1` offsets, or is the
+   literal `self`.
+2. Every offset has exactly `sid_ndim` components.
+3. The segment is `self` **iff** `link_width == 1`.
 
-**Per-cell record count** is derivable from the cell's byte length:
-`num_records = len(cell_bytes) / (9 * link_width)`.  No level-wide
-`num_links` counter is written.
+### 10.6.4 Per-cell payload
 
-### 10.6.4 Canonicalization rules
+Two encodings, selected by one condition:
 
-Two normalization rules, each chosen to avoid writing the same logical
-record under multiple `ci` permutations:
+| Condition | Encoding | Sidecar |
+|-----------|----------|---------|
+| `delta == 0` **and** offsets all zero | flat concatenated rows | `link_fragments/<chunk>` |
+| otherwise | inline self-describing ragged blob | none |
 
-1. **`delta = 0` AND `L = 2` (undirected edge):** Writers MUST emit
-   `ci = [0, 1]`.  This collapses the two orientations of an
-   undirected cross-chunk edge into one canonical form.
-2. **`delta ≠ 0`:** No canonicalization.  Endpoint 0 lives at the
-   owning level; endpoints `1..L-1` live at the target level —
-   direction is semantically meaningful and the `ci` permutation
-   encodes which side each endpoint is on.
-3. **`L ≥ 3`:** No canonicalization mandated.  Higher-arity records
-   carry geometry semantics (face winding, parent ordering) that the
-   spec doesn't presume to standardize.  Geometry writers MAY apply
-   their own conventions but the spec's only hard requirement is the
-   coverage invariant ([§10.6.5](#1065-validation-rules)).
+The intra-chunk case is a flat row block whose per-fragment partition
+lives in the sibling `link_fragments` array.  Every other array — any
+non-zero offset, any `delta ≠ 0` — carries its own ragged framing
+inline
+(`int64 K`, then `int64 offsets[K]`, then the rows) and has no sidecar.
 
-### 10.6.5 Validation rules
+A row is `link_width` integer columns, or `1 + link_width` columns when
+the array carries a permutation index in column 0.
 
-For every populated cell in `cross_chunk_links/<delta>/kK`:
+### 10.6.5 Whether a permutation index is present
 
-- **Byte-length:** `len(cell_bytes) % (9 * link_width) == 0`.
-- **`ci` range:** every `ci_i ∈ [0, K-1]`.
-- **Coverage invariant:** for every record, the set
-  `{ci_0, …, ci_{L-1}}` equals `{0, 1, …, K-1}` — every chunk listed
-  in the cell coord is referenced by at least one endpoint.  Records
-  that don't use every cell-listed chunk belong in a smaller-K array.
-- **Lex-sorted cell coord:** the K chunk-tuples in the cell coord are
-  in strict lex order (sorted-unique-chunks invariant).
-- **Canonical `ci` for `k2` at `delta=0`:** every record has
-  `ci = [0, 1]`.
-- **Chunk-coord arity:** each chunk-tuple in a cell coord has arity
-  `sid_ndim` (verified against the array's declared shape).
-- **Chunk existence:** for `delta = 0`, every chunk in the cell coord
-  names a chunk present in the owning level's chunk grid.  For
-  `delta ≠ 0`, chunks referenced by `ci_0` must exist at the owning
-  level; chunks referenced by `ci_{i > 0}` must exist at level
-  `owning + delta`.
-- **Attribute parity:** for every populated cell in
-  `cross_chunk_link_attributes/<name>/<delta>/kK`, row count equals
-  the parallel link cell's record count.
-- **Same-chunk warning:** populated cells in `k1` are legal but
-  trigger a warning recommending `links/<delta>/<X>` for natural
-  intra-chunk edges; reserve `k1` cells for special-case bridges
-  (e.g. legacy same-chunk-bridge records emitted by some coarsening
-  paths).
+Endpoint order is sometimes data (a directed edge, a mesh face's
+winding) and sometimes an artifact of how the writer canonicalized the
+record.  `has_perm` says which, and it is stamped on every array so a
+reader never has to infer it:
 
-Level-3 consistency validation ([§13.1](13-conformance-and-validation.md#131-conformance-levels))
-checks these invariants across every `cross_chunk_links/<delta>/`
-group present.
-
-### 10.6.6 Worked examples
-
-In each example the **cell coord** is the flat tuple
-`(chunk_sorted_0 - origin) ⧺ … ⧺ (chunk_sorted_{K-1} - origin)`
-into the `kK` array.  Assume `chunk_origin = (0,0,0)` for all
-examples below.
-
-**L=2, K=2, delta=0 — graph edge between two chunks.**  Edge between
-`(0,0,0):5` and `(1,0,0):2`.  Sorted chunks `(0,0,0) < (1,0,0)`:
-
-```
-array:      cross_chunk_links/0/k2          # 6-D sharded vlen-bytes
-cell coord: (0,0,0, 1,0,0)
-record:     ci = [0, 1]                     # endpoint 0 at smaller, endpoint 1 at larger
-            vi = [5, 2]
-bytes:      18 per record
+```python
+def links_has_perm(offsets, *, delta, directed, store):
+    if is_intra(offsets):     return False   # identity: nothing to canonicalise
+    if delta != 0:            return False   # cross-level: source is always endpoint 0
+    if store == "duplicate":  return True    # each copy leads with a different endpoint
+    return not directed                      # undirected sorts; directed does not
 ```
 
-**L=2, K=2, delta=+1 — cross-level edge.**  Fine vertex at
-`(2,3,1):7` parents to coarse metanode at `(1,1,0):3`.  Sorted:
-`(1,1,0) < (2,3,1)`:
+So `has_perm` is true exactly when the record is non-intra **and**
+`delta == 0` **and** (`store == "duplicate"` **or** not `directed`).
 
-```
-array:      cross_chunk_links/+1/k2
-cell coord: (1,1,0, 2,3,1)
-record:     ci = [1, 0]                     # endpoint 0 (fine) at (2,3,1); endpoint 1 (coarse) at (1,1,0)
-            vi = [7, 3]
-bytes:      18 per record
-```
+The canonical sort is what keeps an undirected record from being stored
+twice.  Under `store = "canonical"` with `directed = false`, endpoints
+are sorted by `(chunk_coords, vertex_index)` and the smallest becomes
+the source — which makes **the stored offsets lexicographically
+positive**, so `A→B` and `B→A` are the same cell in the same array
+rather than two.  `perm_idx` is what makes that lossless: it is the
+Lehmer code of the permutation, so a reader recovers the input order —
+mesh-face winding, edge direction — from any stored copy.
 
-The cell coord stays canonical (sorted-unique chunks) for direct
-lookup; the `ci` permutation encodes which side is owning vs target.
+A **negative** offsets segment therefore never arises from a canonical
+undirected record.  It appears in exactly two situations: a `directed`
+family, where input order is preserved verbatim and `A→B` and `B→A`
+legitimately file under opposite offsets at different cells; and
+`store = "duplicate"`, where the copy anchored at the larger chunk
+points back at the smaller one.
 
-**L=2, K=1, delta=0 — same-chunk bridge.**  Both endpoints in chunk
-`(0,0,0)`:
+The family's `directed` and `store` policy fixes what a cell contains:
 
-```
-array:      cross_chunk_links/0/k1          # 3-D sharded vlen-bytes
-cell coord: (0,0,0)
-record:     ci = [0, 0]
-            vi = [2, 5]
-bytes:      18 per record
-```
+| `directed` | `store` | On disk |
+|------------|---------|---------|
+| `false` | `canonical` | one cell, canonical-sorted, `perm_idx` present |
+| `false` | `duplicate` | one copy per distinct incident chunk, `perm_idx` present |
+| `true` | `canonical` | one cell in input order, no `perm_idx` |
+| `true` | `duplicate` | one copy per distinct incident chunk, `perm_idx` present |
 
-(L3 validation warns on populated `k1` cells — they are legal but
-natural intra-chunk edges belong in `links/<delta>/<X>`.)
+`"canonical"` stores each record once, at one source chunk.
+`"duplicate"` stores one copy per distinct incident chunk, so an
+incidence query on any chunk is a single cell read at the cost of a
+larger store; `num_physical_records` then exceeds `num_links`.
 
-**L=3, K=2, delta=0 — triangle face, two distinct chunks.**  Triangle
-V0→V1→V2 with V0 at `(0,0,0):5`, V1 at `(1,0,0):3`, V2 at `(0,0,0):7`:
+### 10.6.6 Metadata
 
-```
-array:      cross_chunk_links/0/k2
-cell coord: (0,0,0, 1,0,0)
-record:     ci = [0, 1, 0]                  # V0→chunk 0 of cell coord, V1→chunk 1, V2→chunk 0
-            vi = [5, 3, 7]
-bytes:      27 per record
-```
-
-A second triangle with vertices `(1,0,0):4`, `(0,0,0):8`, `(0,0,0):9`
-lands in the **same cell** under a different `ci` permutation:
-
-```
-same cell
-record:     ci = [1, 0, 0]
-            vi = [4, 8, 9]
-```
-
-Triangles with the same chunk pair but different winding orientations
-share storage — there is no permutation fan-out across cells.
-
-**L=3, K=3, delta=0 — triangle face spanning three chunks.**
-V0 at `(0,0,0):2`, V1 at `(1,0,0):4`, V2 at `(0,1,0):5`.  Sorted:
-`(0,0,0) < (0,1,0) < (1,0,0)`:
-
-```
-array:      cross_chunk_links/0/k3          # 9-D sharded vlen-bytes
-cell coord: (0,0,0, 0,1,0, 1,0,0)
-record:     ci = [0, 2, 1]
-            vi = [2, 4, 5]
-bytes:      27 per record
-```
-
-**L=4, K=2, delta=0 — quad face spanning two chunks.**  Vertices
-`(0,0,0):2`, `(0,0,0):3`, `(1,0,0):8`, `(1,0,0):7`:
-
-```
-array:      cross_chunk_links/0/k2
-cell coord: (0,0,0, 1,0,0)
-record:     ci = [0, 0, 1, 1]
-            vi = [2, 3, 8, 7]
-bytes:      36 per record
-```
-
-### 10.6.7 Group `.zattrs` schema
-
-Stored on the `cross_chunk_links/<delta>/` parent group:
+Family group — `links/<delta>/`:
 
 ```json
 {
-  "zv_array":    "cross_chunk_links",
-  "sid_ndim":    3,
-  "level_delta": 1,
+  "zv_array":    "links_family",
+  "level_delta": 0,
   "link_width":  2,
-  "layout":      "sharded_v1"
+  "directed":    false,
+  "store":       "canonical",
+  "sid_ndim":    3,
+  "num_links":            12,
+  "num_physical_records": 12
 }
 ```
 
-`layout = "sharded_v1"` is the on-disk discriminator that signals
-"this group uses the K-separated sharded-array layout described
-above".  A reader seeing any other value (including a legacy v0.7
-store that wrote `cross_chunk_links/<delta>/data` with no `layout`
-key) fails with a clear "run the migration helper" error.
+`num_links` is the **logical** record count and `num_physical_records`
+the on-disk row count; both are absent until the family is finalized.
+The policy lives on the group precisely because every offsets array
+beneath the delta decodes against it — a conflicting re-stamp MUST be
+rejected.
 
-Stored on each `kK` zarr-array node under that group:
+Offsets array — `links/<delta>/<offsets>/`:
 
 ```json
 {
-  "zv_array":     "cross_chunk_links_kN",
-  "K":            2,
-  "sid_ndim":     3,
-  "level_delta":  1,
-  "link_width":   2,
-  "chunk_origin": [0, 0, 0]
+  "zv_array":    "links",
+  "dtype":       "int64",
+  "offsets":     [[0, 0, 1]],
+  "has_perm":    true,
+  "link_width":  2,
+  "level_delta": 0
 }
 ```
 
-`chunk_origin` is the per-axis offset subtracted from each chunk
-coord to form the cell coord; non-zero only when bounds cover
-negative chunk-coord space.  The array's own zarr metadata
-(`shape`, `chunk_shape`, codecs incl. `sharding_indexed` and
-`vlen_bytes`) is canonical for cell extent and shard packing.
+`offsets` is the parsed form of the path segment, so a reader that has
+the array need not re-parse its name.
 
-Matching attribute parent group:
+Attribute family group and array:
 
-```javascript
+```json
+{ "zv_array": "link_attribute_family", "name": "weight", "level_delta": 0 }
+```
+```json
 {
-  "zv_array":    "cross_chunk_link_attribute",
+  "zv_array":    "link_attribute",
   "name":        "weight",
   "dtype":       "float32",
-  "level_delta": 1,
-  "shape":       null,        // or [C] for multi-channel
-  "layout":      "sharded_v1"
+  "row_shape":   [],
+  "offsets":     [[0, 0, 1]],
+  "level_delta": 0
 }
 ```
 
-`num_links` is no longer at the group level in either schema — per-
-cell counts are derived from the cell payload's byte length.
+An attribute cell is always a flat dense blob — one row per record in
+the parallel link cell, in the same order — because the record
+boundaries come from the link array.  There is no encoding branch.
 
-### 10.6.8 Reader access patterns
+### 10.6.7 Enumeration order
 
-**Records between two specific chunks `A` and `B` (any L, K = 2):**
-
-```python
-smaller, larger = sorted([A, B])             # lex compare
-arr  = level["cross_chunk_links"][delta]["k2"]
-o    = arr.attrs["chunk_origin"]
-cell = tuple(c - o for c in smaller) + tuple(c - o for c in larger)
-payload = arr[cell]                          # 0-D vlen-bytes scalar
-records = decode(payload, link_width=L)
-# each record's ci tells you which endpoint is at smaller vs larger
-```
-
-One zarr cell read — backed by a single shard fetch under sharding.
-
-**Records with all endpoints in chunks `A, B, C` (any L, K = 3):**
+Records enumerate in **`(offsets segment, cell)` sorted order**.  Note
+that `+` (`0x2b`) and `-` (`0x2d`) both sort *before* `0` (`0x30`), so
+the all-zero intra-chunk segment sorts **last**:
 
 ```python
-c0, c1, c2 = sorted([A, B, C])
-arr  = level["cross_chunk_links"][delta]["k3"]
-o    = arr.attrs["chunk_origin"]
-cell = (tuple(c - o for c in c0) +
-        tuple(c - o for c in c1) +
-        tuple(c - o for c in c2))
-payload = arr[cell]
+sorted(['0.0.0', '0.0.+1', '0.0.-1', '+1.0.0', '-1.0.0'])
+# ['+1.0.0', '-1.0.0', '0.0.+1', '0.0.-1', '0.0.0']
+#                                          ^^^^^^^ intra is LAST
 ```
 
-One lookup; record `ci`s permute the three chunks across endpoints
-per the writer's winding convention.
+A writer that assumes intra-chunk records come first will mis-align any
+parallel array it builds by iteration order.
 
-**All records involving chunk X:** walk every `kK` array under
-`cross_chunk_links/<delta>/` and enumerate populated cells whose
-coord contains `(x_axes - origin)` at any of the K segment positions.
-In practice the caller uses the chunk neighbourhood (chunks spatially
-adjacent to X) to bound the search, and the sharding codec ensures
-nearby cells live in the same outer shard.
+### 10.6.8 Validation rules
 
-**Whole-level scan:** for each existing `kK` array, iterate populated
-outer shards via `arr.store.list_prefix("c/")` and decode each
-non-empty cell.  Total work is comparable to scanning the legacy
-single blob but restartable per shard and far more cache-friendly: a
-reader working in one spatial region fetches only the shards covering
-that region's cells.
+1. Every child of `links/<delta>/` is an array whose name parses as a
+   valid offsets segment under the family's `link_width` and
+   `sid_ndim` (§10.6.3).
+2. `has_perm` on each array equals `links_has_perm(...)` computed from
+   the family policy (§10.6.5).
+3. Row width is `link_width + (1 if has_perm else 0)`; a cell's byte
+   length is an exact multiple of one row.
+4. Every `vi_k` is within the vertex count of chunk `src + o_k`, and
+   that chunk exists at the endpoint's level — the owning level for
+   `o_0`, `owning + delta` for the rest.
+5. The intra array at `delta == 0` has a `link_fragments` cell for
+   every cell it populates; no other array has one.
+6. For every populated attribute cell, its row count equals the record
+   count of the link cell at the same coordinate in the array with the
+   same offsets segment.  A desynchronized write fails loudly at read
+   time.
+7. When present, `num_links` and `num_physical_records` agree with the
+   records actually stored; `num_physical_records ≥ num_links`, with
+   equality unless `store == "duplicate"`.
+
+### 10.6.9 Worked examples
+
+`sid_ndim = 3` throughout.  A record's source chunk is the cell it is
+written to; the other endpoints are read off the path.
+
+| Case | Array | Cell | Row | Reads as |
+|------|-------|------|-----|----------|
+| Intra-chunk edge, `L=2` | `links/0/0.0.0` | `(4,2,7)` | `[5, 2]` | vertices 5 and 2, both in chunk `(4,2,7)` |
+| Edge across `+z`, `L=2` | `links/0/0.0.+1` | `(4,2,7)` | `[0, 5, 2]` | `perm_idx=0`; vertex 5 in `(4,2,7)`, vertex 2 in `(4,2,8)` |
+| Edge across `-x`, `L=2`, `directed` | `links/0/-1.0.0` | `(4,2,7)` | `[5, 2]` | input order kept, no `perm_idx`; a negative offset only arises this way |
+| Intra-chunk triangle, `L=3` | `links/0/0.0.0_0.0.0` | `(4,2,7)` | `[5, 3, 7]` | all three vertices in `(4,2,7)` |
+| Triangle across two seams, `L=3` | `links/0/0.0.+1_0.+1.0` | `(4,2,7)` | `[0, 5, 3, 7]` | vertex 5 in `(4,2,7)`, vertex 3 in `(4,2,8)`, vertex 7 in `(4,3,7)` |
+| Parent reference, `L=1` | `links/+1/self` | `(4,2,7)` | `[9]` | vertex 9 of the anchored chunk one level coarser |
+
+Chunk identity comes from the cell coordinate plus the offsets segment;
+nothing in the record names a chunk.
+
+### 10.6.10 Reader access patterns
+
+"Which records leave chunk `c` toward its `+z` neighbour?" is one cell
+read:
+
+```python
+arr  = level["links"]["0"]["0.0.+1"]
+o    = arr.attrs.get("chunk_grid_origin", (0,) * ndim)
+cell = tuple(ci - oi for ci, oi in zip(c, o))
+records = decode(arr[cell], link_width=L, has_perm=arr.attrs["has_perm"])
+```
+
+"Every record incident on chunk `c`, in any direction" is one cell read
+per offsets segment under the delta — `list(level["links"]["0"])` names
+them.  Under `store = "duplicate"` it collapses to reading chunk `c`'s
+cell in every segment and taking the records verbatim, with no need to
+visit the neighbours.
 
 ## 10.7 Consistency Guarantees
 
-A writer that emits cross-chunk records is responsible for:
+- **Chunk-local vertex indices.**  No record stores a global vertex
+  ID.  Every `vi_k` is local to chunk `src + o_k`, and that chunk is
+  recovered from the cell coordinate plus the path — so there is
+  nothing to reconstruct and no global-ID space to keep consistent.
+- **Attribute parity.**  `link_attributes/<name>/<delta>/<offsets>`
+  mirrors `links/<delta>/<offsets>` exactly: same offsets segments,
+  same cells, same per-cell row order.  Rows align 1:1 without storing
+  a row id.
+- **Uniform family policy.**  `link_width`, `sid_ndim`, `directed` and
+  `store` are properties of the whole `<delta>` family, not of an
+  individual offsets array.  A store that needs two link widths at one
+  level needs two deltas, not two segments.
+- **Referential integrity.**  A record naming chunk `src + o_k` obliges
+  that chunk to exist and to have at least `vi_k + 1` vertices at the
+  endpoint's level.  Deleting a chunk without deleting the records that
+  reach into it leaves the store invalid.
+- **Finalize before sharding.**  `num_links` and
+  `num_physical_records` must be written before the store is sharded.
+  Once cells are packed into shard files a shard's inner index is no
+  longer derivable from chunk-file names, so counts that would have
+  been recovered by listing cannot be.
 
-- Every endpoint's chunk coordinates (recovered from the cell coord
-  via `chunk_origin`) exist (the chunk has a `vertices/<chunk>` blob
-  at that level).
-- Every endpoint's `vi` falls within its chunk's vertex count.
-- The `link_width` matches the parent group's `.zattrs.link_width`
-  (uniform across all `kK` arrays under that group).
-- The parallel attribute cell (if emitted) has the same record count
-  as the link cell at the same `(delta, K, cell-coord)` — a
-  desynchronized write fails loudly at read time.
+## 10.8 Cross-Pyramid-Level Links — Optional
 
-Level-3 consistency validation ([§13.1](13-conformance-and-validation.md#131-conformance-levels)) checks these invariants
-across every `cross_chunk_links/<delta>/` group present.
+Records with `delta ≠ 0` connect a chunk at the owning level to chunks
+at `owning + delta`.  They are emitted only when `cross_level_storage`
+∈ {`implicit`, `explicit`} — see
+[§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional).
 
-## 10.8 Cross-Pyramid-Level Cross-Chunk Links — Optional
+### Offsets are measured in the target level's grid
 
-Cross-pyramid-level cross-chunk links (`cross_chunk_links/<delta>/`
-with `delta ≠ 0`) are an **optional feature**, not a baseline schema
-requirement.  Whether a store emits them is a writer-side choice
-driven by what readers of the store need to do — see [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional) for the
-overall framing of multiscale link arrays.
+Under `delta ≠ 0` the offsets are **not** the raw coordinate difference
+between the two chunks.  They are measured against the source chunk
+*re-anchored into the target level's grid*:
 
-These records exist only when the writer chose
-`cross_level_storage ∈ {"implicit", "explicit"}` *and* the relevant
-endpoints end up in different chunks at the differing pyramid level
-(which happens both when objects naturally span chunks at the coarse
-level *and*, more often, when the coarse level grows `chunk_shape`
-under v0.7 so the source-side chunk and the target-side chunk are
-necessarily different).
+```
+anchor = floor(c_src * r_src / r_trg)
+o      = c_trg - anchor            # decode:  c_trg = anchor + o
+```
 
-Pyramids that opt out (`cross_level_storage = "none"`) never emit
-these records and pay no storage cost — but they cannot be drilled
-across levels.  Readers seeing `format_capabilities` without
-`multiscale_links` must treat each coarse level as an independent
-simplification.
-
-### Record format
-
-Same as [§7.7](07-core-arrays.md#77-cross-chunk-links) and
-[§10.6.2](#1062-cell-index-encoding): the cell coord in the `kK`
-array lists the K sorted unique chunks the record touches; the
-record is `L` chunk-indices (uint8) followed by `L` local vertex
-indices (int64).
-
-**Endpoint level convention** (also in [§7.7](07-core-arrays.md#77-cross-chunk-links)): endpoint 0 lives at the
-*owning* resolution level L (the level under whose group the array
-resides); endpoints `k > 0` live at level `L + delta`.  When
-`delta > 0`, the owning level is the finer side and the records map
-fine → coarse; when `delta < 0`, the owning level is the coarser
-side and the records map coarse → fine.
-
-For `link_width = 1` (metanode drill-down records), the single
-endpoint is at level `L + delta` and is paired with an implicit
-source defined by the owning fragment (the record stores only the
-target reference).
+where `r_src` and `r_trg` are the two levels' chunk-shape multipliers
+relative to root (see [§9.3](09-multi-resolution-support.md#93-spatial-chunk-scaling)).
+This matters whenever the coarse level grows `chunk_shape`: without
+re-anchoring, two source chunks in the same geometric relationship to
+their parent produce different raw differences, and the same physical
+relationship would scatter across several offsets segments.  With it,
+both produce the same offset and land in one array.
 
 ### Emission rules
 
-The pyramid builder consults two root-metadata knobs:
+- Endpoint 0 is always the source, at the owning level; endpoints
+  `k > 0` are at `owning + delta`.
+- Every `delta ≠ 0` array therefore has `has_perm = false`, uses the
+  inline ragged encoding, and has no `link_fragments` sidecar.
+- `link_width = 1` — a bare parent or child reference — writes to the
+  `self` segment, whose record is a single vertex index.
+- Under `cross_level_storage = "explicit"` both directions are
+  materialized (`+N` at the finer level, `-N` at the coarser);
+  `"implicit"` writes only the positive delta and leaves the reverse to
+  be computed at read time.
 
-- **`cross_level_storage`** ∈ `{"none", "implicit", "explicit"}`:
-  - `"none"` — no `<delta> ≠ 0` records emitted at all.
-  - `"implicit"` — only `+N` direction emitted (at the finer level).
-    Reader inversion from coarse → fine is computed at read time.
-  - `"explicit"` (default) — both `+N` and `-N` emitted.  Both
-    directions queryable at read time.
-- **`cross_level_depth`** — max `|delta|` materialised.  `1`
-  emits ±1; `N` emits ±1, ±2, …, ±N (composed step-by-step during
-  pyramid build); `0` disables; `-1` walks all adjacent level pairs.
+### Known limitation
 
-### Interaction with v0.7 chunk-scale growth
-
-When the coarser level grows `chunk_shape` (per-level
-`zarr_vectors_level.chunk_shape` is a positive integer multiple of
-root), a fine-level chunk's parent metavertex naturally lives in a
-*different* chunk coord at the coarse level — `coord_coarse =
-coord_fine // chunk_scale_factor`.  The cross-chunk link layout
-already supports this because each endpoint's chunk is recovered
-from a cell-coord segment selected by `ci`, with no assumption that
-the owning-side and target-side chunks live in the same grid.
-Cross-spatial-chunk and cross-pyramid-level cases share the same
-on-disk shape.
-
-## 10.9 Migration from v0.7
-
-The v0.7 monolithic `cross_chunk_links/<delta>/data` int64 blob (and
-its parallel `cross_chunk_link_attributes/<name>/<delta>/data`) is
-**not readable** by v0.8 readers.  Stores tagged with the
-`multiscale_links` capability but lacking `partitioned_cross_chunk_links`
-trigger a fatal error directing the user to run a one-shot in-place
-migration utility, which:
-
-1. Reads the legacy blob and decodes each record's endpoints.
-2. Groups records by `K = |unique chunks the record touches|` and by
-   `sorted_chunks = tuple(sorted(set(endpoint.chunk for endpoint in record)))`.
-3. For each `K` with at least one record, creates the
-   `cross_chunk_links/<delta>/kK` sharded vlen-bytes array (shape and
-   `chunk_origin` derived from the chunk coords seen across all
-   records), and writes each `sorted_chunks` group as a single cell
-   payload using the `L · uint8 ci || L · int64 vi` encoding —
-   applying the `delta=0 L=2` `ci = [0, 1]` canonicalization along
-   the way.
-4. Applies the same regrouping to every parallel attribute blob,
-   producing matching `cross_chunk_link_attributes/<name>/<delta>/kK`
-   arrays.
-5. Stamps the parent group `.zattrs` with `layout = "sharded_v1"` and
-   the root `format_capabilities` with `partitioned_cross_chunk_links`.
-6. Deletes the legacy `data` blob and bumps `zv_version` to `"0.8.0"`.
-
-The migration is destructive (it removes the old blob after the new
-layout is in place); back up the store first if you need a recoverable
-snapshot.
+The `<delta>` segment is uniform across all of a record's non-source
+endpoints.  A record whose endpoints sit at *different* levels — a
+triangle at levels `(N, N, N+1)`, say — cannot be expressed.  Such a
+record must be decomposed, or the geometry rewritten so that all
+non-source endpoints share one level.

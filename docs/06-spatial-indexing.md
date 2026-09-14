@@ -2,7 +2,7 @@
 
 ## 6.1 Spatial Index Definition
 
-A ZV store's spatial index is a regular N-dimensional grid pinned to
+A Zarr Vectors store's spatial index is a regular N-dimensional grid pinned to
 the level-0 chunk shape:
 
 - **Axes**: declared in NGFF style under `zarr.json["multiscales"][0].axes`.
@@ -20,27 +20,50 @@ the level-0 chunk shape:
 - **Reference system**: optional OME-Zarr RFC 4 / 5 `crs` dict, with
   per-axis UDUNITS-2 units on the NGFF axes.
 
-Per-level overrides (v0.7) are allowed and described in [§6.6](#66-per-level-chunk-shape-v07).
+Per-level overrides are allowed and described in [§6.6](#66-per-level-chunk-shape).
 
 ## 6.2 Spatial Chunk Addressing
 
 Chunk coordinates are integer tuples in chunk-grid space, one entry
-per space axis.  The Zarr v3 chunk-key encoding is the dot-separated
-form:
+per space axis, written in the dot-separated form:
 
 - 2-D: `<i.j>` (e.g. `3.7`)
 - 3-D: `<i.j.k>` (e.g. `2.1.0`)
 - N-D: `<c_0.c_1.…c_{ndim-1}>`
 
 Empty chunks (no data) are simply absent from the store — Zarr v3
-returns a "fill value" miss; ZV readers treat missing chunks as
+returns a "fill value" miss; Zarr Vectors readers treat missing chunks as
 "no data here."
 
 Translating between physical position and chunk coordinate:
 
 ```text
-chunk_coord_i = floor((position_i - bounds_min_i) / chunk_shape_i)
+chunk_coord_i = floor(position_i / chunk_shape_i)
 ```
+
+Note that this is **absolute** — the store's lower bound is not
+subtracted — so a store whose data extends below the origin has
+negative chunk coordinates, and that is well-defined rather than an
+error.
+
+### Chunk coordinate → array cell
+
+A chunk coordinate is not directly an index into a per-chunk array.
+Each such array is one array over the level's chunk grid, and the
+chunk at absolute coord `c` occupies
+
+```text
+cell_i   = chunk_coord_i - origin_i
+origin_i = floor(bounds_min_i / chunk_shape_i)
+```
+
+The origin is stored as the array's `chunk_grid_origin` attribute
+**only when it is non-zero**; its absence means the two are the same
+number.  Keeping the offset in the array rather than in the coordinate
+is what lets negative-coordinate data map onto a 0-indexed Zarr array
+without renumbering anything.  The dot-separated chunk key remains the
+*absolute* coordinate — it is how a chunk is named in metadata such as
+`nonempty_chunks` — while the cell index is where its bytes live.
 
 At a coarser pyramid level with `chunk_shape_level = r_i × root_chunk_shape_i`,
 a level-N chunk coord and a level-0 chunk coord at the same
@@ -81,11 +104,10 @@ connectivity is then expressed by one of two strategies:
   vertex per shared boundary point.
 - **Explicit cross-chunk links** (`cross_chunk_strategy =
   "explicit_links"`, the default): each cross-chunk edge or face is
-  written as a record in the `cross_chunk_links/0/kK` sharded
-  vlen-bytes array (K = number of distinct chunks the record
-  touches), with `(chunk_A, vi_A)` / `(chunk_B, vi_B)` endpoints
-  recovered from the cell coord plus per-endpoint `chunk_index`.  No
-  vertex duplication.
+  written as a record in `links/0/<offsets>` at a non-zero offsets
+  segment, in the cell of its source chunk.  Each endpoint's chunk is
+  recovered from that cell plus the offsets, and its vertex index is
+  local to that chunk.  No vertex duplication.
 
 A store may also set `cross_chunk_strategy = "both"` and emit both
 representations.
@@ -98,7 +120,7 @@ ordering, etc.) are out of scope for this snapshot but would be
 expressed by replacing the chunk-key encoding while keeping the
 per-chunk byte payloads intact.
 
-## 6.6 Per-Level Chunk Shape (v0.7)
+## 6.6 Per-Level Chunk Shape
 
 `RootMetadata.chunk_shape` defines the **level-0** grid.  Each pyramid
 level may carry its own `chunk_shape` in
@@ -122,4 +144,4 @@ amortise the per-chunk overhead by holding bigger physical regions.
 The cost: when `r_i > 1`, a level-N chunk physically covers a region
 spanning multiple level-(N-1) chunks, so cross-pyramid-level link
 arrays carry both endpoints' chunk coords explicitly (the record
-format already supports this — see [§7.7](07-core-arrays.md#77-cross-chunk-links) and [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).
+format already supports this — see [§7.5](07-core-arrays.md#75-vertex-links) and [§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).

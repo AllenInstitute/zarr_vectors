@@ -6,8 +6,7 @@ Each pyramid level lives under a bare-integer sub-group of the store
 root: `0/` is full resolution, `1/`, `2/`, … are progressively
 coarser.  Per-level metadata (`zarr.json["zarr_vectors_level"]`)
 carries the level index, vertex count, source level
-(`parent_level`), bin grid, and an optional `chunk_shape` override
-(v0.7).
+(`parent_level`), bin grid, and an optional `chunk_shape` override.
 
 Levels are independent Zarr groups — a reader that only needs the
 coarsest level fetches only that level's blobs.  Levels do not
@@ -33,7 +32,7 @@ The default.  Each surviving object's vertices are aggregated into
    the writer).  Per-vertex attributes follow the same reduction.
 3. The coarse-level fragment for that object then carries the
    metavertex rows; the fragment's parent edges live in
-   `links/+1/<chunk>` (when emitted — see [§9.6](#96-multiscale-link-arrays--optional)).
+   the `links/+1/` arrays (when emitted — see [§9.6](#96-multiscale-link-arrays--optional)).
 
 Per-object coarsening preserves object identity across levels: an
 object dropped at a coarser level retains its OID slot, and its
@@ -50,8 +49,7 @@ A single coarse-bin metavertex may be referenced by more than one
 object's manifest — e.g. two streamlines that pass through the same
 coarse bin both reference the same fragment row.  Levels using this
 representation set `shared_fragments = true` and the store advertises
-the `CAP_SHARED_FRAGMENTS` token (renamed from the pre-0.6
-`shared_vertex_groups` token).
+the `CAP_SHARED_FRAGMENTS` token.
 
 ### Manual or none (`coarsening_method = "manual"` | `"none"`)
 
@@ -68,7 +66,7 @@ invariants).  `"none"` is used for level 0 itself.
   points and reduces straight-segment density.
 - **Streamlines / polylines**: point reduction along paths.
 
-## 9.3 Spatial Chunk Scaling (v0.7)
+## 9.3 Spatial Chunk Scaling
 
 `RootMetadata.chunk_shape` defines the **finest** (level-0) chunk
 grid.  Each pyramid level may override the chunk shape via
@@ -101,6 +99,37 @@ plays for OME-Zarr image pyramids: coarser levels can amortise
 per-chunk overhead by holding larger physical regions, while readers
 keep using integer arithmetic to walk between levels.
 
+### Bin geometry lives in the NGFF transform
+
+A level's `bin_ratio` and `bin_shape` are **not** stored in
+`zarr_vectors_level`.  They are written once, into that level's NGFF
+`coordinateTransformations` entry, and read back from it:
+
+```text
+write:   scale       = bin_shape / base_bin_shape      (per axis, float)
+         translation = bin_shape / 2                   (bin centre offset)
+
+read:    bin_ratio   = scale
+         bin_shape   = 2 × translation
+```
+
+Level 0 is the identity case: `scale = 1.0` per axis and
+`translation = base_bin_shape / 2`.
+
+Two details matter, and both exist because the alternative fails
+quietly:
+
+- **`scale` is derived from `bin_shape`, not from `bin_ratio`.**  The
+  two halves of one transform must agree, and they only do if they
+  come from the same source.  A coarsening factor of 1.5 on a root bin
+  of 8 gives `translation = 6.0` — correct — while a `bin_ratio`
+  rounded to the nearest integer would give `scale = 2.0`, a third too
+  large.  Nothing in the Zarr Vectors API would show the disagreement; any NGFF
+  viewer would render it.
+- **`scale` is a float multiplier with no integer requirement**, and
+  is read back without rounding.  Rounding on the way in or out means
+  a fractional coarsening factor cannot round-trip: 1.5 out, 2 back.
+
 ## 9.4 Level-of-Detail Selection
 
 Readers choose a level by:
@@ -126,19 +155,17 @@ The format keeps these invariants:
   level 0 inherits both from root.
 - `object_id` space is preserved by per-object pyramids; dropped
   objects retain empty manifest rows.
-- Cross-level edges, when emitted, live in `links/<delta>/<chunk>`
-  (intra-chunk) and `cross_chunk_links/<delta>/kK` (cross-chunk;
-  K-separated sharded vlen-bytes arrays keyed by sorted unique chunks
-  — [§10.6](10-cross-chunk-linking.md#106-on-disk-layout-k-separated-sharded-vlen-bytes-arrays)),
+- Cross-level edges, when emitted, live in
+  `links/<delta>/<offsets>/` — one family for both intra- and
+  cross-chunk records
+  ([§10.6](10-cross-chunk-linking.md#106-on-disk-layout-the-links-family)) —
   with endpoint 0 at the owning level and endpoint k > 0 at level
   `owning + delta`.
 
 ## 9.6 Multiscale Link Arrays — Optional
 
-Cross-pyramid-level links — `links/<delta>/<chunk>` and the
-K-separated sharded cross-chunk-link arrays at
-`cross_chunk_links/<delta>/kK`
-for `delta ≠ 0` — are an **optional
+Cross-pyramid-level links — the arrays under `links/<delta>/` and
+`link_attributes/<name>/<delta>/` for `delta ≠ 0` — are an **optional
 feature**, not a baseline schema requirement.  Whether a store
 includes them is a writer-side choice driven by the consumer use
 case:
@@ -162,21 +189,29 @@ back to the fine-level vertices.  These pyramids set
 pay no storage cost.  The trade-off is hard: those stores cannot be
 "drilled" — readers must treat each level as its own representation.
 
-### The `<delta>` sub-folder layout
+### The `<delta>` and `<offsets>` sub-folder layout
 
-Every link-bearing array path carries a per-pyramid-level-delta
-segment between the array name and the chunk key:
+Both link-bearing families carry a signed pyramid-level-delta segment
+and then a relative-offset segment, before the chunk key:
 
 ```text
-links/<delta>/<chunk>
-cross_chunk_links/<delta>/kK            # K in {1, …, link_width}
-link_attributes/<name>/<delta>/<chunk>
-cross_chunk_link_attributes/<name>/<delta>/kK
+links/<delta>/<offsets>/<chunk>
+link_attributes/<name>/<delta>/<offsets>/<chunk>
 ```
 
 `<delta> = 0` is mandatory whenever the geometry has explicit links
 at all (it's where same-level links live).  `<delta> ≠ 0` is the
 optional cross-pyramid-level capability.
+
+`<offsets>` says where the record's other endpoints sit relative to
+its source chunk, so a record that stays inside one chunk and a record
+that crosses a seam differ only by which array they land in — see
+[§10.6.3](10-cross-chunk-linking.md#1063-the-offsets-segment).  Under
+`<delta> ≠ 0` the offsets are measured against the source chunk
+**re-anchored into the target level's grid**, which is what keeps the
+same physical relationship in one array when the coarse level grows
+`chunk_shape`; the rule is in
+[§10.8](10-cross-chunk-linking.md#108-cross-pyramid-level-links--optional).
 
 Stores that emit any `<delta> ≠ 0` array advertise
 `CAP_MULTISCALE_LINKS` in `format_capabilities`.  A reader missing
@@ -210,7 +245,7 @@ metavertex at level L+1 is reached by:
    `link_width = 1` records keyed by source fragment).
 2. Each record carries an endpoint `(c', v')` at level L+1 — the
    parent metavertex's chunk and row index in that chunk's
-   `vertices/<c'>` (which may be a different chunk under v0.7
+   `vertices/<c'>` (which may be a different chunk under
    chunk-shape growth: `c' = c // r`).
 3. Inverse (`-1`) traversal works analogously when
    `cross_level_storage = "explicit"`.
@@ -218,7 +253,7 @@ metavertex at level L+1 is reached by:
 For deeper traversal, compose step-by-step or read a pre-materialized
 deeper delta (`+2`, `+3`, …) up to `cross_level_depth`.
 
-### Interaction with v0.7 chunk-scale growth
+### Interaction with chunk-scale growth
 
 When `chunk_scale_factor > 1`, a level-N chunk physically covers `∏
 r_i` level-(N-1) chunks.  The natural source and target chunk
