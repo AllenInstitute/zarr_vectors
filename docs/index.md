@@ -30,3 +30,10 @@
 14-examples
 15-appendices
 ```
+
+```{toctree}
+:maxdepth: 2
+:caption: Proposals
+
+proposals/rfc8-alignment
+```
