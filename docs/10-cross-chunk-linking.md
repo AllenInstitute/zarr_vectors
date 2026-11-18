@@ -190,7 +190,8 @@ The orders are VTK's; in them every cell has positive volume.  Absent
 (3 or more), so a store without the field reads as before.
 
 - `element` MUST match `link_width`, and MUST NOT appear on a
-  `delta ≠ 0` family.
+  `delta ≠ 0` family: a cell's vertices are all on one pyramid level.
+  They may sit in different chunks, like any record's endpoints.
 - Vertex order MUST survive storage, as for mesh winding
   ([§12.2](12-geometry-types.md#122-meshes)).
 - Writers SHOULD NOT store cells with non-positive signed volume.

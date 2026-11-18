@@ -52,6 +52,24 @@ where marked `...` (fields: [§8](08-metadata.md#81-metadata-structure)).
   chunk-scale growth at coarse levels.  A raw level may set
   `link_fragments_aligned: true` when link fragment `k` holds exactly the
   faces whose first vertex is in vertex fragment `k`.
+- **Volume pyramids**: a coarse level of a volume mesh has its own
+  cells; fine cells are not carried down, since a fine cell is far
+  smaller than a coarse bin.  Two ways to make them:
+  - *On the bin lattice* (`coarsening_method: "per_object"`): for each
+    object, every 2 × 2 × 2 block of bins the object fills becomes one
+    `hexahedron` (from hexahedra) or six `tetra` (from other elements)
+    joining those bins' metavertices.  Cells inverted at the
+    metavertices' positions are dropped.  The volume is filled without
+    gaps, and is accurate to about one bin.
+  - *Decimated elsewhere* (`coarsening_method: "manual"`): any valid
+    mesh of the same objects, written as the level.  Its `parent_level`,
+    `bin_shape` and `bin_ratio` are recorded as for a built level, and
+    `links/±delta` MAY link each parent vertex to the nearest vertex of
+    the same object.
+
+  Either way the levels are joined by object ids and cross-level vertex
+  links ([§10.8](10-cross-chunk-linking.md#108-cross-pyramid-level-links--optional)),
+  not by cells: a cell's vertices are all on one level.
 
 ```javascript
 {"kind": "links_family", "level_delta": 0, "link_width": 3, "directed": false,
