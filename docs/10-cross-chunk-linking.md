@@ -175,6 +175,30 @@ stored row count; both are absent until the family is finalized.  Every
 offsets array beneath the family decodes against its policy, so a
 conflicting re-stamp MUST be rejected.
 
+A `delta = 0` family MAY carry `element`, declaring that each record is
+one solid cell of a volume mesh rather than an edge or a polygon face:
+
+| `element` | `link_width` | Vertex order |
+|-----------|--------------|--------------|
+| `"tetra"` | 4 | `0, 1, 2` a triangle whose right-hand normal points towards `3` |
+| `"pyramid"` | 5 | base quad `0`–`3` whose right-hand normal points towards the apex `4` |
+| `"wedge"` | 6 | triangle `0, 1, 2` whose right-hand normal points away from triangle `3, 4, 5`; `i` joined to `i + 3` |
+| `"hexahedron"` | 8 | quad `0`–`3` whose right-hand normal points towards quad `4`–`7`; `i` joined to `i + 4` |
+
+The orders are VTK's; in them every cell has positive volume.  Absent
+(or `null`), a record is an edge (`link_width` 2) or a polygon face
+(3 or more), so a store without the field reads as before.
+
+- `element` MUST match `link_width`, and MUST NOT appear on a
+  `delta ≠ 0` family.
+- Vertex order MUST survive storage, as for mesh winding
+  ([§12.2](12-geometry-types.md#122-meshes)).
+- Writers SHOULD NOT store cells with non-positive signed volume.
+- A writer MUST NOT add, change or remove `element` on a family that
+  already holds records: that would change what the records mean.
+- A reader that does not recognise the value MUST NOT read the records
+  as polygon faces.
+
 Offsets array `links/<delta>/<offsets>/` (`nonempty_chunks` and
 `chunk_grid_origin` omitted); `offsets` is the parsed path segment:
 
@@ -244,6 +268,9 @@ intra-chunk records come first.
 8. Under `link_fragments_aligned: true`, every intra-chunk record in
    link fragment `k` has its first endpoint in vertex fragment `k` of
    the same chunk, and vice versa.
+9. When present, `element` is one of `tetra`, `pyramid`, `wedge`,
+   `hexahedron`, its width equals `link_width`, and the family's
+   `delta` is 0.
 
 ### 10.6.9 Worked examples
 

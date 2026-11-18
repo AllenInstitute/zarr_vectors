@@ -312,7 +312,7 @@ specified in [§7](07-core-arrays.md)):
 | `"vertices"`               | `<level>/vertices/`                                                  | `dtype`, `encoding` (`"raw"` \| `"draco"`) | `shape`, `compression_codec` |
 | `"vertex_fragments"`       | `<level>/vertex_fragments/`                                          | `encoding` = `"fragment_index_v1"` | — |
 | `"link_fragments"`         | `<level>/link_fragments/`                                            | `encoding` = `"fragment_index_v1"` | — |
-| `"links_family"`           | `<level>/links/<delta>/` — **group**                                 | `level_delta`, `link_width`, `directed`, `store` (`"canonical"` \| `"duplicate"`) | `sid_ndim`, `num_links`, `num_physical_records` |
+| `"links_family"`           | `<level>/links/<delta>/` — **group**                                 | `level_delta`, `link_width`, `directed`, `store` (`"canonical"` \| `"duplicate"`) | `sid_ndim`, `num_links`, `num_physical_records`, `element` ([§10.6.6](10-cross-chunk-linking.md#1066-metadata)) |
 | `"links"`                  | `<level>/links/<delta>/<offsets>/`                                   | `dtype`, `offsets`, `has_perm`, `link_width`, `level_delta` | — |
 | `"vertex_attribute"`       | `<level>/vertex_attributes/<name>/`                                  | `name`, `dtype`, `row_shape` | `channel_names`, `channel_dtype`, `unit`, `description`, `encoding` = `"dictionary"` with `categories`, `ordered`, `_FillValue` |
 | `"fragment_attribute"`     | `<level>/fragment_attributes/<name>/`                                | `name`, `dtype`, `row_shape` | `channel_names`, `channel_dtype` |

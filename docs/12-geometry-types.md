@@ -27,8 +27,14 @@ where marked `...` (fields: [§8](08-metadata.md#81-metadata-structure)).
 
 ## 12.2 Meshes
 
-- **Faces**: `link_width = 3` for triangles, 4 for quads or tetrahedra;
+- **Faces**: `link_width = 3` for triangles, 4 for quads, and so on;
   `links_convention = "explicit"`.
+- **Volume cells**: a volume mesh stores one solid cell per record and
+  declares it with the family's `element` (`tetra`, `pyramid`, `wedge`,
+  `hexahedron`; [§10.6.6](10-cross-chunk-linking.md#1066-metadata)), so a
+  4-wide record is a tetrahedron rather than a quad.  A family holds one
+  element type, since it has one `link_width`.  Its boundary surface is
+  the cell faces that belong to one cell only.
 - **Raw** (`vertices` `encoding: "raw"`): positions in `vertices/`; faces
   inside a chunk in `links/0/0.0.0_0.0.0/`, partitioned by
   `link_fragments/`.
@@ -50,6 +56,14 @@ where marked `...` (fields: [§8](08-metadata.md#81-metadata-structure)).
 ```javascript
 {"kind": "links_family", "level_delta": 0, "link_width": 3, "directed": false,
  "store": "canonical", "sid_ndim": 3, "num_links": 800, "num_physical_records": 800}
+```
+
+A tetrahedral volume mesh:
+
+```javascript
+{"kind": "links_family", "level_delta": 0, "link_width": 4, "directed": false,
+ "store": "canonical", "sid_ndim": 3, "element": "tetra",
+ "num_links": 162, "num_physical_records": 162}
 ```
 
 ## 12.3 Skeletons

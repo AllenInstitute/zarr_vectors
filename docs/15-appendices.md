@@ -388,6 +388,10 @@ Tokens are open-set; readers must tolerate unknown values.
   - `crs` leaves the root object for `proj:projjson`.
   - Readers refuse 0.9.x stores (naming the migration) and stores with
     a newer minor version.  Migration: in place (see *Migration*).
+  - Additive in the same release: a `delta = 0` links family may declare
+    `element` (`tetra`, `pyramid`, `wedge`, `hexahedron`), making each
+    record a volume-mesh cell rather than an edge or polygon face
+    ([§10.6.6](10-cross-chunk-linking.md#1066-metadata)).
 
 - **0.9.4** — optional dense object-index layout,
   `dense_manifests_v1`: `object_index/manifest_spans` (`int64
