@@ -1,0 +1,5 @@
+# schema.json is generated; pin the generator so `build.py --check` is stable.
+linkml==1.12.1
+linkml-runtime==1.12.1
+jsonschema==4.26.0
+PyYAML==6.0.3

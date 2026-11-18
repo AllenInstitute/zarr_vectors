@@ -1,0 +1,3789 @@
+{
+  "$defs": {
+    "AttributeSpec": {
+      "additionalProperties": true,
+      "properties": {
+        "attribute_name": {
+          "description": "The key: the attribute's name.",
+          "type": "string"
+        },
+        "dtype": {
+          "pattern": ".+",
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "attribute_name"
+      ],
+      "title": "AttributeSpec",
+      "type": "object"
+    },
+    "AttributeSpec__identifier_optional": {
+      "additionalProperties": true,
+      "properties": {
+        "attribute_name": {
+          "description": "The key: the attribute's name.",
+          "type": "string"
+        },
+        "dtype": {
+          "pattern": ".+",
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "AttributeSpec",
+      "type": "object"
+    },
+    "AttributeSpecs": {
+      "additionalProperties": false,
+      "description": "Declared attributes, keyed by scope and then by attribute name.",
+      "properties": {
+        "fragment": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AttributeSpec__identifier_optional"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": "object"
+        },
+        "group": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AttributeSpec__identifier_optional"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": "object"
+        },
+        "link": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AttributeSpec__identifier_optional"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": "object"
+        },
+        "object": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AttributeSpec__identifier_optional"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": "object"
+        },
+        "vertex": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AttributeSpec__identifier_optional"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": "object"
+        }
+      },
+      "title": "AttributeSpecs",
+      "type": "object"
+    },
+    "Axis": {
+      "additionalProperties": true,
+      "description": "One coordinate axis, as in OME-Zarr RFC 4/5.",
+      "properties": {
+        "name": {
+          "pattern": ".+",
+          "type": "string"
+        },
+        "type": {
+          "description": "\"space\", \"time\", \"channel\" or a custom type.",
+          "pattern": ".+",
+          "type": "string"
+        },
+        "unit": {
+          "pattern": ".+",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "Axis",
+      "type": "object"
+    },
+    "CoarseningMethod": {
+      "enum": [
+        "per_object",
+        "manual",
+        "none"
+      ],
+      "title": "CoarseningMethod",
+      "type": "string"
+    },
+    "Codec": {
+      "additionalProperties": true,
+      "properties": {
+        "configuration": {
+          "$ref": "#/$defs/CodecConfiguration"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Codec",
+      "type": "object"
+    },
+    "CodecConfiguration": {
+      "additionalProperties": true,
+      "description": "A codec's configuration; only a sharding codec's inner `codecs` is modelled.",
+      "properties": {
+        "codecs": {
+          "items": {
+            "$ref": "#/$defs/Codec"
+          },
+          "type": "array"
+        }
+      },
+      "title": "CodecConfiguration",
+      "type": "object"
+    },
+    "ConventionEntry": {
+      "additionalProperties": true,
+      "description": "One Convention Metadata Object (any convention).",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "schema_url": {
+          "type": "string"
+        },
+        "spec_url": {
+          "type": "string"
+        },
+        "uuid": {
+          "type": "string"
+        }
+      },
+      "title": "ConventionEntry",
+      "type": "object"
+    },
+    "CrossChunkStore": {
+      "enum": [
+        "canonical",
+        "duplicate"
+      ],
+      "title": "CrossChunkStore",
+      "type": "string"
+    },
+    "CrossChunkStrategy": {
+      "enum": [
+        "explicit_links",
+        "boundary_deduplication",
+        "both"
+      ],
+      "title": "CrossChunkStrategy",
+      "type": "string"
+    },
+    "CrossLevelStorage": {
+      "enum": [
+        "none",
+        "implicit",
+        "explicit"
+      ],
+      "title": "CrossLevelStorage",
+      "type": "string"
+    },
+    "FragmentAttributeMetadata": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "properties": {
+        "channel_dtype": {
+          "type": "string"
+        },
+        "channel_names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "chunk_grid_origin": {
+          "description": "Chunk-grid coordinate of the array's cell (0, ..., 0).",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "dtype": {
+          "description": "NumPy dtype name of the rows inside a cell.",
+          "pattern": ".+",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "const": "fragment_attribute",
+          "description": "What the node is."
+        },
+        "name": {
+          "description": "The attribute's name.",
+          "pattern": ".+",
+          "type": "string"
+        },
+        "nonempty_chunks": {
+          "description": "Keys of the chunks that hold data.  A cache: a reader that finds it absent lists the store instead.",
+          "items": {
+            "pattern": "^-?[0-9]+(\\.-?[0-9]+)*$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "row_shape": {
+          "description": "Tail dimensions of one row (`[]` for scalar rows).",
+          "items": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "dtype",
+        "row_shape",
+        "kind"
+      ],
+      "title": "FragmentAttributeMetadata",
+      "type": "object"
+    },
+    "FragmentIndexMetadata": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "description": "Fragment index over a level's vertices or intra-chunk links.",
+      "properties": {
+        "chunk_grid_origin": {
+          "description": "Chunk-grid coordinate of the array's cell (0, ..., 0).",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "encoding": {
+          "const": "fragment_index_v1",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "description": "What the node is.",
+          "enum": [
+            "vertex_fragments",
+            "link_fragments"
+          ]
+        },
+        "nonempty_chunks": {
+          "description": "Keys of the chunks that hold data.  A cache: a reader that finds it absent lists the store instead.",
+          "items": {
+            "pattern": "^-?[0-9]+(\\.-?[0-9]+)*$",
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "encoding",
+        "kind"
+      ],
+      "title": "FragmentIndexMetadata",
+      "type": "object"
+    },
+    "GroupAttributeMetadata": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "properties": {
+        "channel_names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "dtype": {
+          "description": "NumPy dtype name of the rows inside a cell.",
+          "pattern": ".+",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "const": "group_attribute",
+          "description": "What the node is."
+        },
+        "name": {
+          "description": "The attribute's name.",
+          "pattern": ".+",
+          "type": "string"
+        },
+        "shape": {
+          "items": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "dtype",
+        "kind"
+      ],
+      "title": "GroupAttributeMetadata",
+      "type": "object"
+    },
+    "GroupsMetadata": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "properties": {
+            "group_ranges": {
+              "additionalProperties": false,
+              "patternProperties": {
+                "^[0-9]+$": {
+                  "items": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "group_ranges": {
+          "$ref": "#/$defs/OpenObject",
+          "description": "Group id to `[start, stop)` object-row range."
+        },
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "const": "groups",
+          "description": "What the node is."
+        },
+        "num_groups": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "num_groups",
+        "kind"
+      ],
+      "title": "GroupsMetadata",
+      "type": "object"
+    },
+    "IdentityTransform": {
+      "additionalProperties": true,
+      "description": "Only the identity is allowed.",
+      "properties": {
+        "scale": {
+          "items": {
+            "maximum": 1,
+            "minimum": 1,
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "translation": {
+          "items": {
+            "maximum": 0,
+            "minimum": 0,
+            "type": "number"
+          },
+          "type": "array"
+        }
+      },
+      "title": "IdentityTransform",
+      "type": "object"
+    },
+    "LevelArrayName": {
+      "enum": [
+        "vertices",
+        "vertex_fragments",
+        "link_fragments",
+        "links",
+        "vertex_attributes",
+        "fragment_attributes",
+        "link_attributes",
+        "object_index",
+        "object_attributes",
+        "groups",
+        "group_attributes"
+      ],
+      "title": "LevelArrayName",
+      "type": "string"
+    },
+    "LevelMetadata": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "level"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "bounds"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "bounds": {}
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "description": "An id-preserving level records the OID space it inherits.",
+          "if": {
+            "properties": {
+              "preserves_object_ids": {
+                "const": true
+              }
+            },
+            "required": [
+              "preserves_object_ids"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "required": [
+              "inherited_num_objects"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "description": "Level 0's bin is the root `base_bin_shape`; it has no parent and preserves no ids.",
+          "if": {
+            "properties": {
+              "level": {
+                "const": 0
+              }
+            },
+            "required": [
+              "level"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "bin_ratio": {
+                "type": "null"
+              },
+              "bin_shape": {
+                "type": "null"
+              },
+              "parent_level": {
+                "type": "null"
+              },
+              "preserves_object_ids": {
+                "const": false
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "properties": {
+            "bin_ratio": {
+              "items": {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "bin_shape": {
+              "items": {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "chunk_shape": {
+              "items": {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "object_sparsity": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            }
+          },
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "arrays_present": {
+          "items": {
+            "$ref": "#/$defs/LevelArrayName"
+          },
+          "type": "array"
+        },
+        "bin_ratio": {
+          "description": "Per-axis bin size relative to level 0 (absent or null at level 0).",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "bin_shape": {
+          "description": "Bin edge lengths at this level (absent or null at level 0).",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "chunk_attribute_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "chunk_attribute_values": {
+          "description": "One label per leading-axis bin, in bin order.",
+          "items": {
+            "$ref": "#/$defs/OpenValue"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "chunk_dims": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "chunk_shape": {
+          "description": "Physical chunk size per spatial axis (> 0).",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "coarsening_method": {
+          "$ref": "#/$defs/CoarseningMethod"
+        },
+        "fragments_tile": {
+          "description": "True when every chunk's fragments tile its vertex buffer.  Absent means false.",
+          "type": "boolean"
+        },
+        "inherited_num_objects": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "const": "level",
+          "description": "What the node is."
+        },
+        "level": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "link_fragments_aligned": {
+          "type": "boolean"
+        },
+        "object_sparsity": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "octree_chunks": {
+          "$ref": "#/$defs/OpenObject"
+        },
+        "parent_level": {
+          "description": "The level this one was coarsened from (absent or null at level 0).",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "presence": {
+          "$ref": "#/$defs/PresenceState"
+        },
+        "preserves_object_ids": {
+          "type": "boolean"
+        },
+        "shared_fragments": {
+          "type": "boolean"
+        },
+        "vertex_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "level",
+        "kind"
+      ],
+      "title": "LevelMetadata",
+      "type": "object"
+    },
+    "LinkAttributeFamilyMetadata": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "const": "link_attribute_family",
+          "description": "What the node is."
+        },
+        "level_delta": {
+          "type": "integer"
+        },
+        "name": {
+          "description": "The attribute's name.",
+          "pattern": ".+",
+          "type": "string"
+        },
+        "num_links": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "level_delta",
+        "kind"
+      ],
+      "title": "LinkAttributeFamilyMetadata",
+      "type": "object"
+    },
+    "LinkAttributeMetadata": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "description": "Mirrors the `links/<delta>/<offsets>` array of the same delta and offsets cell for cell.  `row_shape` is absent on an array created empty.",
+      "properties": {
+        "channel_dtype": {
+          "type": "string"
+        },
+        "channel_names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "chunk_grid_origin": {
+          "description": "Chunk-grid coordinate of the array's cell (0, ..., 0).",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "dtype": {
+          "description": "NumPy dtype name of the rows inside a cell.",
+          "pattern": ".+",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "const": "link_attribute",
+          "description": "What the node is."
+        },
+        "level_delta": {
+          "type": "integer"
+        },
+        "name": {
+          "description": "The attribute's name.",
+          "pattern": ".+",
+          "type": "string"
+        },
+        "nonempty_chunks": {
+          "description": "Keys of the chunks that hold data.  A cache: a reader that finds it absent lists the store instead.",
+          "items": {
+            "pattern": "^-?[0-9]+(\\.-?[0-9]+)*$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "offsets": {
+          "items": {
+            "items": {
+              "description": "The `link_width - 1` relative offsets naming the array, each of `sid_ndim` components, relative to the record's source chunk.",
+              "type": "integer"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "row_shape": {
+          "description": "Tail dimensions of one row (`[]` for scalar rows).",
+          "items": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "offsets",
+        "level_delta",
+        "name",
+        "dtype",
+        "kind"
+      ],
+      "title": "LinkAttributeMetadata",
+      "type": "object"
+    },
+    "LinksConvention": {
+      "description": "How intra-chunk links are represented.",
+      "enum": [
+        "explicit",
+        "implicit_sequential",
+        "implicit_sequential_with_branches"
+      ],
+      "title": "LinksConvention",
+      "type": "string"
+    },
+    "LinksFamilyMetadata": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "description": "A `links/<delta>/` group: the policy every offsets array beneath it decodes against.",
+      "properties": {
+        "directed": {
+          "type": "boolean"
+        },
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "const": "links_family",
+          "description": "What the node is."
+        },
+        "level_delta": {
+          "type": "integer"
+        },
+        "link_width": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "num_links": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "num_physical_records": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sid_ndim": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "store": {
+          "$ref": "#/$defs/CrossChunkStore"
+        }
+      },
+      "required": [
+        "level_delta",
+        "link_width",
+        "directed",
+        "store",
+        "kind"
+      ],
+      "title": "LinksFamilyMetadata",
+      "type": "object"
+    },
+    "LinksMetadata": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "description": "One `links/<delta>/<offsets>` array; a cell holds the records whose source chunk it is.",
+      "properties": {
+        "chunk_grid_origin": {
+          "description": "Chunk-grid coordinate of the array's cell (0, ..., 0).",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "dtype": {
+          "description": "NumPy dtype name of the rows inside a cell.",
+          "pattern": ".+",
+          "type": "string"
+        },
+        "has_perm": {
+          "type": "boolean"
+        },
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "const": "links",
+          "description": "What the node is."
+        },
+        "level_delta": {
+          "type": "integer"
+        },
+        "link_width": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "nonempty_chunks": {
+          "description": "Keys of the chunks that hold data.  A cache: a reader that finds it absent lists the store instead.",
+          "items": {
+            "pattern": "^-?[0-9]+(\\.-?[0-9]+)*$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "offsets": {
+          "items": {
+            "items": {
+              "description": "The `link_width - 1` relative offsets naming the array, each of `sid_ndim` components, relative to the record's source chunk.",
+              "type": "integer"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "dtype",
+        "offsets",
+        "has_perm",
+        "link_width",
+        "level_delta",
+        "kind"
+      ],
+      "title": "LinksMetadata",
+      "type": "object"
+    },
+    "ManifestBlockDtype": {
+      "enum": [
+        "int64",
+        "int32"
+      ],
+      "title": "ManifestBlockDtype",
+      "type": "string"
+    },
+    "ManifestLayout": {
+      "description": "Writer default for new object indexes.",
+      "enum": [
+        "vlen",
+        "dense"
+      ],
+      "title": "ManifestLayout",
+      "type": "string"
+    },
+    "MultiscaleEntry": {
+      "additionalProperties": true,
+      "properties": {
+        "asset": {
+          "description": "A level group's name.",
+          "pattern": "^[0-9]+$",
+          "type": "string"
+        },
+        "transform": {
+          "$ref": "#/$defs/IdentityTransform"
+        }
+      },
+      "required": [
+        "asset"
+      ],
+      "title": "MultiscaleEntry",
+      "type": "object"
+    },
+    "Multiscales": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "properties": {
+            "layout": {
+              "contains": {
+                "properties": {
+                  "asset": {
+                    "const": "0"
+                  }
+                },
+                "required": [
+                  "asset"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      ],
+      "description": "The registered multiscales convention's block (zarr-conventions/multiscales v0.1): one `{\"asset\": \"<level>\"}` entry per resolution level, \"0\" included.  Vertex coordinates are the same at every level, so an entry carries no transform, or only the identity.  Bin geometry is the root `base_bin_shape` (level 0) and each coarse level's own `bin_shape` / `bin_ratio`.",
+      "properties": {
+        "layout": {
+          "items": {
+            "$ref": "#/$defs/MultiscaleEntry"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "layout"
+      ],
+      "title": "Multiscales",
+      "type": "object"
+    },
+    "NodeAttributes": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "properties": {
+            "zarr_conventions": {
+              "contains": {
+                "$ref": "#/$defs/ZarrVectorsConventionMetadata"
+              },
+              "items": {
+                "if": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "uuid": {
+                          "const": "66268a61-7833-4995-bbcb-233bb417dae5"
+                        }
+                      },
+                      "required": [
+                        "uuid"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "name": {
+                          "const": "zarr_vectors"
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "type": "object"
+                },
+                "then": {
+                  "$ref": "#/$defs/ZarrVectorsConventionMetadata"
+                }
+              },
+              "maxContains": 1,
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      ],
+      "description": "The node's `attributes`.  Other keys (other conventions' keys such as `proj:projjson`, `user_metadata`) are allowed and ignored.",
+      "properties": {
+        "multiscales": {
+          "$ref": "#/$defs/Multiscales"
+        },
+        "zarr_conventions": {
+          "description": "Convention registrations.  Exactly one entry identifies Zarr Vectors; any entry carrying its uuid or name must match in full.",
+          "items": {
+            "$ref": "#/$defs/ConventionEntry"
+          },
+          "type": "array"
+        },
+        "zarr_vectors": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RootMetadata"
+            },
+            {
+              "$ref": "#/$defs/LevelMetadata"
+            },
+            {
+              "$ref": "#/$defs/VerticesMetadata"
+            },
+            {
+              "$ref": "#/$defs/FragmentIndexMetadata"
+            },
+            {
+              "$ref": "#/$defs/LinksFamilyMetadata"
+            },
+            {
+              "$ref": "#/$defs/LinksMetadata"
+            },
+            {
+              "$ref": "#/$defs/LinkAttributeFamilyMetadata"
+            },
+            {
+              "$ref": "#/$defs/ObjectIndexMetadata"
+            },
+            {
+              "$ref": "#/$defs/ObjectAttributeMetadata"
+            },
+            {
+              "$ref": "#/$defs/GroupsMetadata"
+            },
+            {
+              "$ref": "#/$defs/GroupAttributeMetadata"
+            },
+            {
+              "$ref": "#/$defs/ParametricMetadata"
+            },
+            {
+              "$ref": "#/$defs/ParametricArrayMetadata"
+            },
+            {
+              "$ref": "#/$defs/VertexAttributeMetadata"
+            },
+            {
+              "$ref": "#/$defs/FragmentAttributeMetadata"
+            },
+            {
+              "$ref": "#/$defs/LinkAttributeMetadata"
+            }
+          ],
+          "description": "The single nesting key.  `kind` says what the node is."
+        }
+      },
+      "required": [
+        "zarr_conventions",
+        "zarr_vectors"
+      ],
+      "title": "NodeAttributes",
+      "type": "object"
+    },
+    "NodeType": {
+      "enum": [
+        "array",
+        "group"
+      ],
+      "title": "NodeType",
+      "type": "string"
+    },
+    "ObjectAttributeMetadata": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "properties": {
+        "channel_names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "dtype": {
+          "description": "NumPy dtype name of the rows inside a cell.",
+          "pattern": ".+",
+          "type": "string"
+        },
+        "fill_sentinel_meaning": {
+          "const": "absent",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "const": "object_attribute",
+          "description": "What the node is."
+        },
+        "name": {
+          "description": "The attribute's name.",
+          "pattern": ".+",
+          "type": "string"
+        },
+        "shape": {
+          "items": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "dtype",
+        "kind"
+      ],
+      "title": "ObjectAttributeMetadata",
+      "type": "object"
+    },
+    "ObjectIndexConvention": {
+      "enum": [
+        "standard",
+        "identity"
+      ],
+      "title": "ObjectIndexConvention",
+      "type": "string"
+    },
+    "ObjectIndexLayout": {
+      "enum": [
+        "vlen_manifests_v1",
+        "vlen_manifests_v2",
+        "dense_manifests_v1"
+      ],
+      "title": "ObjectIndexLayout",
+      "type": "string"
+    },
+    "ObjectIndexMetadata": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "description": "An index created before any object is written MAY carry only `kind`; once it holds manifests, `num_objects`, `sid_ndim` and `layout` MUST be present (not checked here).",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "const": "object_index",
+          "description": "What the node is."
+        },
+        "layout": {
+          "$ref": "#/$defs/ObjectIndexLayout"
+        },
+        "num_objects": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "num_present": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "object_ids_sorted": {
+          "type": "boolean"
+        },
+        "sid_ndim": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "ObjectIndexMetadata",
+      "type": "object"
+    },
+    "OpenObject": {
+      "additionalProperties": true,
+      "description": "A JSON object whose contents this convention does not constrain.",
+      "title": "OpenObject",
+      "type": "object"
+    },
+    "OpenValue": {
+      "description": "Any JSON value (a bin label is a string or a number)."
+    },
+    "ParametricArrayMetadata": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "properties": {
+        "dtype": {
+          "description": "NumPy dtype name of the rows inside a cell.",
+          "pattern": ".+",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "description": "What the node is.",
+          "enum": [
+            "parametric_objects",
+            "parametric_names"
+          ]
+        },
+        "max_row_length": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "num_objects": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "num_objects",
+        "kind"
+      ],
+      "title": "ParametricArrayMetadata",
+      "type": "object"
+    },
+    "ParametricMetadata": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "const": "parametric",
+          "description": "What the node is."
+        },
+        "parametric_types": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ParametricType__identifier_optional"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "ParametricMetadata",
+      "type": "object"
+    },
+    "ParametricType": {
+      "additionalProperties": true,
+      "properties": {
+        "coefficients": {
+          "description": "Coefficient names, in row order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "pattern": ".+",
+          "type": "string"
+        },
+        "type_id": {
+          "description": "The key: the type id stored in each object row.",
+          "pattern": "^[0-9]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type_id",
+        "name",
+        "coefficients"
+      ],
+      "title": "ParametricType",
+      "type": "object"
+    },
+    "ParametricType__identifier_optional": {
+      "additionalProperties": true,
+      "properties": {
+        "coefficients": {
+          "description": "Coefficient names, in row order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "pattern": ".+",
+          "type": "string"
+        },
+        "type_id": {
+          "description": "The key: the type id stored in each object row.",
+          "pattern": "^[0-9]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "coefficients"
+      ],
+      "title": "ParametricType",
+      "type": "object"
+    },
+    "PerChunkArray": {
+      "additionalProperties": false,
+      "description": "An array with one cell per chunk of the level's grid.",
+      "properties": {
+        "chunk_grid_origin": {
+          "description": "Chunk-grid coordinate of the array's cell (0, ..., 0).",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "nonempty_chunks": {
+          "description": "Keys of the chunks that hold data.  A cache: a reader that finds it absent lists the store instead.",
+          "items": {
+            "pattern": "^-?[0-9]+(\\.-?[0-9]+)*$",
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "PerChunkArray",
+      "type": "object"
+    },
+    "PresenceState": {
+      "enum": [
+        "deferred"
+      ],
+      "title": "PresenceState",
+      "type": "string"
+    },
+    "RootMetadata": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "root"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "crs"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "crs": {}
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "root"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "parent_level"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "parent_level": {}
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "octree_sharding": {}
+            },
+            "required": [
+              "octree_sharding"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "shard_shape": {}
+            },
+            "required": [
+              "shard_shape"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "properties": {
+            "axes": {
+              "contains": {
+                "properties": {
+                  "type": {
+                    "const": "space"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
+        {
+          "properties": {
+            "base_bin_shape": {
+              "items": {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "chunk_shape": {
+              "items": {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "attribute_specs": {
+          "$ref": "#/$defs/AttributeSpecs"
+        },
+        "axes": {
+          "description": "The store's coordinate axes; at least one is a space axis.",
+          "items": {
+            "$ref": "#/$defs/Axis"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "base_bin_shape": {
+          "description": "Level 0 bin edge lengths (> 0).",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "bounds": {
+          "items": {
+            "items": {
+              "description": "Global vertex bounding box, `[[min...], [max...]]`.",
+              "type": "number"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "chunk_shape": {
+          "description": "Physical chunk size per spatial axis (> 0).",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "coordinate_offset": {
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "cross_chunk_strategy": {
+          "$ref": "#/$defs/CrossChunkStrategy"
+        },
+        "cross_level_depth": {
+          "minimum": -1,
+          "type": "integer"
+        },
+        "cross_level_storage": {
+          "$ref": "#/$defs/CrossLevelStorage"
+        },
+        "format_capabilities": {
+          "description": "Optional feature tokens.  Open set; readers tolerate unknown tokens.",
+          "items": {
+            "pattern": ".+",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "geometry_types": {
+          "items": {
+            "pattern": ".+",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "const": "root",
+          "description": "What the node is."
+        },
+        "links_convention": {
+          "$ref": "#/$defs/LinksConvention"
+        },
+        "manifest_block_dtype": {
+          "$ref": "#/$defs/ManifestBlockDtype"
+        },
+        "manifest_layout": {
+          "$ref": "#/$defs/ManifestLayout"
+        },
+        "object_index_convention": {
+          "$ref": "#/$defs/ObjectIndexConvention"
+        },
+        "octree_sharding": {
+          "$ref": "#/$defs/OpenObject",
+          "description": "Writer default configuration of the octree sharding codec.  Needs `shard_shape`."
+        },
+        "reduction_factor": {
+          "minimum": 2,
+          "type": "integer"
+        },
+        "required_capabilities": {
+          "description": "Capability tokens a reader MUST support to read the store at all.",
+          "items": {
+            "pattern": ".+",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "shard_shape": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "items": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
+          ],
+          "description": "Writer default: cells per shard per axis.  Each array's own zarr.json is the truth about that array."
+        },
+        "zv_version": {
+          "const": "0.10.0",
+          "description": "Format version of the store.  This convention covers format 0.10.0, whose cell payloads are those of 0.9.4; 0.10.0 moved the metadata into this convention's layout, and 0.9.x stores migrate in place.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "zv_version",
+        "axes",
+        "chunk_shape",
+        "bounds",
+        "geometry_types",
+        "kind"
+      ],
+      "title": "RootMetadata",
+      "type": "object"
+    },
+    "RowAttributeMetadata": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "description": "Per-chunk attribute rows aligned with vertices, fragments or links.",
+      "properties": {
+        "channel_dtype": {
+          "type": "string"
+        },
+        "channel_names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "chunk_grid_origin": {
+          "description": "Chunk-grid coordinate of the array's cell (0, ..., 0).",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "dtype": {
+          "description": "NumPy dtype name of the rows inside a cell.",
+          "pattern": ".+",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "description": "What the node is."
+        },
+        "name": {
+          "description": "The attribute's name.",
+          "pattern": ".+",
+          "type": "string"
+        },
+        "nonempty_chunks": {
+          "description": "Keys of the chunks that hold data.  A cache: a reader that finds it absent lists the store instead.",
+          "items": {
+            "pattern": "^-?[0-9]+(\\.-?[0-9]+)*$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "row_shape": {
+          "description": "Tail dimensions of one row (`[]` for scalar rows).",
+          "items": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "dtype",
+        "kind"
+      ],
+      "title": "RowAttributeMetadata",
+      "type": "object"
+    },
+    "VertexAttributeMetadata": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "properties": {
+        "channel_dtype": {
+          "type": "string"
+        },
+        "channel_names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "chunk_grid_origin": {
+          "description": "Chunk-grid coordinate of the array's cell (0, ..., 0).",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "dtype": {
+          "description": "NumPy dtype name of the rows inside a cell.",
+          "pattern": ".+",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "const": "vertex_attribute",
+          "description": "What the node is."
+        },
+        "name": {
+          "description": "The attribute's name.",
+          "pattern": ".+",
+          "type": "string"
+        },
+        "nonempty_chunks": {
+          "description": "Keys of the chunks that hold data.  A cache: a reader that finds it absent lists the store instead.",
+          "items": {
+            "pattern": "^-?[0-9]+(\\.-?[0-9]+)*$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "row_shape": {
+          "description": "Tail dimensions of one row (`[]` for scalar rows).",
+          "items": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "dtype",
+        "row_shape",
+        "kind"
+      ],
+      "title": "VertexAttributeMetadata",
+      "type": "object"
+    },
+    "VertexEncoding": {
+      "enum": [
+        "raw",
+        "draco"
+      ],
+      "title": "VertexEncoding",
+      "type": "string"
+    },
+    "VerticesMetadata": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "properties": {
+        "chunk_grid_origin": {
+          "description": "Chunk-grid coordinate of the array's cell (0, ..., 0).",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "compression_codec": {
+          "type": "string"
+        },
+        "dtype": {
+          "description": "NumPy dtype name of the rows inside a cell.",
+          "pattern": ".+",
+          "type": "string"
+        },
+        "encoding": {
+          "$ref": "#/$defs/VertexEncoding"
+        },
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "const": "vertices",
+          "description": "What the node is."
+        },
+        "nonempty_chunks": {
+          "description": "Keys of the chunks that hold data.  A cache: a reader that finds it absent lists the store instead.",
+          "items": {
+            "pattern": "^-?[0-9]+(\\.-?[0-9]+)*$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "shape": {
+          "items": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "dtype",
+        "encoding",
+        "kind"
+      ],
+      "title": "VerticesMetadata",
+      "type": "object"
+    },
+    "VlenBytesCodec": {
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "const": "vlen-bytes",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "VlenBytesCodec",
+      "type": "object"
+    },
+    "VlenDataType": {
+      "description": "The zarr-extensions `bytes` data type.  zarr-python 3.x writes it as `variable_length_bytes`.",
+      "enum": [
+        "bytes",
+        "variable_length_bytes"
+      ],
+      "title": "VlenDataType",
+      "type": "string"
+    },
+    "ZarrNode": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "attributes": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "zarr_vectors": {
+                        "allOf": [
+                          {
+                            "properties": {
+                              "kind": {
+                                "enum": [
+                                  "root",
+                                  "level",
+                                  "links_family",
+                                  "link_attribute_family",
+                                  "object_index",
+                                  "parametric"
+                                ]
+                              }
+                            },
+                            "type": "object"
+                          }
+                        ]
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "attributes"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "node_type": {
+                "const": "group"
+              }
+            },
+            "required": [
+              "node_type"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "attributes": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "zarr_vectors": {
+                        "allOf": [
+                          {
+                            "properties": {
+                              "kind": {
+                                "enum": [
+                                  "vertices",
+                                  "vertex_fragments",
+                                  "link_fragments",
+                                  "links",
+                                  "vertex_attribute",
+                                  "fragment_attribute",
+                                  "link_attribute",
+                                  "object_attribute",
+                                  "groups",
+                                  "group_attribute",
+                                  "parametric_objects",
+                                  "parametric_names"
+                                ]
+                              }
+                            },
+                            "type": "object"
+                          }
+                        ]
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "attributes"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "node_type": {
+                "const": "array"
+              }
+            },
+            "required": [
+              "node_type"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "attributes": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "zarr_vectors": {
+                        "allOf": [
+                          {
+                            "properties": {
+                              "kind": {
+                                "enum": [
+                                  "vertices",
+                                  "vertex_fragments",
+                                  "link_fragments",
+                                  "links",
+                                  "vertex_attribute",
+                                  "fragment_attribute",
+                                  "link_attribute",
+                                  "groups",
+                                  "parametric_names"
+                                ]
+                              }
+                            },
+                            "type": "object"
+                          }
+                        ]
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "attributes"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "codecs": {},
+              "data_type": {
+                "enum": [
+                  "bytes",
+                  "variable_length_bytes"
+                ]
+              }
+            },
+            "required": [
+              "data_type",
+              "codecs"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "attributes": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "zarr_vectors": {
+                        "allOf": [
+                          {
+                            "properties": {
+                              "kind": {
+                                "const": "root"
+                              }
+                            },
+                            "type": "object"
+                          }
+                        ]
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "attributes"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "multiscales": {}
+                    },
+                    "required": [
+                      "multiscales"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "attributes"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "description": "The cells of a vlen kind are encoded by the `vlen-bytes` codec, directly or as the cell codec of a sharding codec (sharding_indexed, octree).",
+          "if": {
+            "properties": {
+              "attributes": {
+                "properties": {
+                  "zarr_vectors": {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "vertices",
+                          "vertex_fragments",
+                          "link_fragments",
+                          "links",
+                          "vertex_attribute",
+                          "fragment_attribute",
+                          "link_attribute",
+                          "groups",
+                          "parametric_names"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "zarr_vectors"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "attributes"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "codecs": {
+                "anyOf": [
+                  {
+                    "contains": {
+                      "$ref": "#/$defs/VlenBytesCodec"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "contains": {
+                      "properties": {
+                        "configuration": {
+                          "properties": {
+                            "codecs": {
+                              "contains": {
+                                "$ref": "#/$defs/VlenBytesCodec"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "codecs"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "configuration"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                ]
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "description": "The root registers the multiscales convention by uuid.",
+          "if": {
+            "properties": {
+              "attributes": {
+                "properties": {
+                  "zarr_vectors": {
+                    "properties": {
+                      "kind": {
+                        "const": "root"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "zarr_vectors"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "attributes"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "attributes": {
+                "properties": {
+                  "zarr_conventions": {
+                    "contains": {
+                      "properties": {
+                        "uuid": {
+                          "const": "d35379db-88df-4056-af3a-620245f8e347"
+                        }
+                      },
+                      "required": [
+                        "uuid"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "description": "One node's zarr.json (Zarr v3).  Only the fields this convention constrains are modelled; everything else in zarr.json is allowed.",
+      "properties": {
+        "attributes": {
+          "$ref": "#/$defs/NodeAttributes"
+        },
+        "codecs": {
+          "description": "Zarr codec pipeline (arrays only).",
+          "items": {
+            "$ref": "#/$defs/Codec"
+          },
+          "type": "array"
+        },
+        "data_type": {
+          "$ref": "#/$defs/OpenValue",
+          "description": "Zarr's own data type field (arrays only).  Constrained only for the vlen kinds, by the rule below."
+        },
+        "node_type": {
+          "$ref": "#/$defs/NodeType"
+        },
+        "zarr_format": {
+          "const": 3,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "zarr_format",
+        "node_type",
+        "attributes"
+      ],
+      "title": "ZarrNode",
+      "type": "object"
+    },
+    "ZarrVectorsBlock": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "nonempty_chunks"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "nonempty_chunks": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "root",
+                  "level",
+                  "links_family",
+                  "link_attribute_family",
+                  "object_index",
+                  "object_attribute",
+                  "groups",
+                  "group_attribute",
+                  "parametric",
+                  "parametric_objects",
+                  "parametric_names"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "not": {
+              "required": [
+                "chunk_grid_origin"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "chunk_grid_origin": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ],
+      "description": "Fields depend on `kind`.  Unknown fields are allowed and SHOULD be ignored.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ZarrVectorsKind",
+          "description": "What the node is."
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "ZarrVectorsBlock",
+      "type": "object"
+    },
+    "ZarrVectorsConventionMetadata": {
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "properties": {
+            "schema_url": {}
+          },
+          "required": [
+            "schema_url"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "spec_url": {}
+          },
+          "required": [
+            "spec_url"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "uuid": {}
+          },
+          "required": [
+            "uuid"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "The Convention Metadata Object for the Zarr Vectors convention v0.1.0.  On non-root nodes the uuid alone is enough.",
+      "properties": {
+        "description": {
+          "const": "Spatially chunked, multi-resolution N-dimensional vector data (point clouds, meshes, skeletons, streamlines, graphs)",
+          "type": "string"
+        },
+        "name": {
+          "const": "zarr_vectors",
+          "type": "string"
+        },
+        "schema_url": {
+          "const": "https://raw.githubusercontent.com/Andrew-Keenlyside/zarr-vectors/refs/tags/v0.1.0/schema.json",
+          "type": "string"
+        },
+        "spec_url": {
+          "const": "https://github.com/Andrew-Keenlyside/zarr-vectors/blob/v0.1.0/README.md",
+          "type": "string"
+        },
+        "uuid": {
+          "const": "66268a61-7833-4995-bbcb-233bb417dae5",
+          "type": "string"
+        }
+      },
+      "title": "ZarrVectorsConventionMetadata",
+      "type": "object"
+    },
+    "ZarrVectorsKind": {
+      "description": "What a node is.  An unknown kind MUST be rejected.",
+      "enum": [
+        "root",
+        "level",
+        "vertices",
+        "vertex_fragments",
+        "link_fragments",
+        "links_family",
+        "links",
+        "vertex_attribute",
+        "fragment_attribute",
+        "link_attribute_family",
+        "link_attribute",
+        "object_index",
+        "object_attribute",
+        "groups",
+        "group_attribute",
+        "parametric",
+        "parametric_objects",
+        "parametric_names"
+      ],
+      "title": "ZarrVectorsKind",
+      "type": "string"
+    }
+  },
+  "$id": "https://raw.githubusercontent.com/Andrew-Keenlyside/zarr-vectors/refs/tags/v0.1.0/schema.json",
+  "$ref": "#/$defs/ZarrNode",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Validates one node's zarr.json under the Zarr Vectors convention v0.1.0 (metadata for Zarr Vectors format 0.10.0). Every property lives under the single attribute key `zarr_vectors`, discriminated by `kind`. Rules that span several nodes (axis counts, bin divisibility, the parent_level chain, link offsets) are listed in the convention README and are not checked here. GENERATED by convention/build.py from convention/zarr_vectors.linkml.yaml in AllenInstitute/zarr_vectors; edit the LinkML source there, not schema.json.",
+  "title": "Zarr Vectors Convention v0.1.0"
+}
