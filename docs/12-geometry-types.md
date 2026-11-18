@@ -1,106 +1,116 @@
 # 12. Geometry Types
 
+A store lists its geometries in the root object's `geometry_types`.  No
+geometry has root fields of its own; they differ in `links_convention`
+and in which arrays and link families a level carries.  The snippets are
+`zarr_vectors` objects written by the reference implementation, cut
+where marked `...` (fields: [§8](08-metadata.md#81-metadata-structure)).
+
 ## 12.1 Point Clouds
 
-- **Structure**: unstructured vertices (no links).
-- **Required arrays**: `vertices/`.  Optional companions:
-  `vertex_fragments/` (mandatory for multi-fragment chunks),
-  `vertex_attributes/<name>/`, `object_index/manifests` (when objects
-  exist, e.g. nuclei centroids), `groups` (region partitions).
-- **`links_convention`**: typically `"implicit_sequential"` —
-  point clouds have no edges; the `links/` array group is absent.
-- **Spatial Indexing**: direct spatial chunking; per-chunk
-  fragmentation lets readers slice to single bins without decoding
-  the whole chunk (see [§6.3](06-spatial-indexing.md#63-spatial-query-semantics)).
-- **Multi-Resolution**: per-object coarsening reduces each surviving
-  object's vertices to a single coarse-bin centroid metavertex per
-  level.
+- **Arrays**: `vertices/`; optionally `vertex_fragments/` (required for
+  multi-fragment chunks), `vertex_attributes/<name>/`, `object_index/`
+  (when points are objects, e.g. nuclei) and `groups`.
+- **`links_convention`**: irrelevant, and may be omitted (default
+  `"implicit_sequential"`).  No `links/0/` family; a pyramid's
+  `links/+1/` and `links/-1/` may still appear.
+- **Spatial indexing**: per-bin fragments let a reader slice to single
+  bins ([§6.3](06-spatial-indexing.md#63-spatial-query-semantics)).  A
+  3-D level may use octree chunks.
+- **Multi-resolution**: each surviving object becomes one centroid
+  metavertex per coarse bin.
+
+```javascript
+{"kind": "root", "geometry_types": ["point_cloud"],
+ "chunk_shape": [200.0, 200.0, 200.0], "base_bin_shape": [50.0, 50.0, 50.0], ...}
+```
 
 ## 12.2 Meshes
 
-- **Types**: triangular (`link_width = 3`), quad, tetrahedral
-  (`link_width = 4`), etc.
-- **Storage options**:
-  - **Option 1 — Draco-encoded**: `vertices/<chunk>.encoding =
-    "draco"`; positions and faces co-encoded inside the Draco blob.
-    `links/0/` is omitted.
-  - **Option 2 — Separate positions + faces**: `vertices/<chunk>`
-    raw float positions; the all-zero offsets array
-    `links/0/0.0.0_0.0.0/<chunk>` carries face records
-    (`link_width = 3` for triangles); `link_fragments/<chunk>`
-    partitions faces by vertex fragment.
-- **Cross-chunk faces**: faces with vertices in distinct chunks are
-  records in the same family at a non-zero offsets segment — e.g.
-  `links/0/0.0.+1_0.0.+1` for a face straddling the `+z` seam, or
-  `links/0/0.0.+1_0.+1.0` for one spanning three chunks.  A face
-  carries `link_width - 1 = 2` offsets joined by `_`, so a mesh's
-  offsets segments are twice as long as an edge's.
-- **Winding order**: set `directed = true` on the family when face
-  vertex order carries orientation, so no canonical sort is applied
-  and no permutation index is stored.
-- **Multi-Resolution**: edge-collapse decimation or per-object
-  metavertex aggregation; chunk-scale growth keeps coarse-level
-  chunk counts tractable.
+- **Faces**: `link_width = 3` for triangles, 4 for quads or tetrahedra;
+  `links_convention = "explicit"`.
+- **Raw** (`vertices` `encoding: "raw"`): positions in `vertices/`; faces
+  inside a chunk in `links/0/0.0.0_0.0.0/`, partitioned by
+  `link_fragments/`.
+- **Draco** (`encoding: "draco"`): each `vertices` cell is one Draco
+  bitstream holding positions and intra-chunk faces; there is no
+  `links/0/0.0.0_0.0.0/`.
+- **Cross-chunk faces**: records at a non-zero offsets segment, two
+  offsets joined by `_` — `0.0.+1_0.0.+1` straddles the `+z` seam,
+  `0.0.+1_0.+1.0` spans three chunks.
+- **Winding** MUST survive: either `directed = true` (no sort, no
+  permutation index) or an undirected canonical family whose non-intra
+  records carry `perm_idx`
+  ([§10.6.5](10-cross-chunk-linking.md#1065-whether-a-permutation-index-is-present)).
+- **Multi-resolution**: decimation or per-object metavertices, with
+  chunk-scale growth at coarse levels.  A raw level may set
+  `link_fragments_aligned: true` when link fragment `k` holds exactly the
+  faces whose first vertex is in vertex fragment `k`.
+
+```javascript
+{"kind": "links_family", "level_delta": 0, "link_width": 3, "directed": false,
+ "store": "canonical", "sid_ndim": 3, "num_links": 800, "num_physical_records": 800}
+```
 
 ## 12.3 Skeletons
 
-- **Structure**: graph of vertices and parent edges (tree).
-- **Required arrays**: `vertices/`, `vertex_fragments/`.  Most
-  skeletons additionally carry a `links/0/` family for parent edges.
-- **`link_width` — pick 2, not 1.**  `link_width = 1` writes to the
-  `self` segment and encodes a *bare* reference: one vertex index, with
-  no offsets and therefore no way to name a second chunk.  It suits a
-  cross-*level* parent pointer (`delta ≠ 0`), where the target chunk is
-  the re-anchored source.  A parent edge that may cross a chunk
-  boundary at the same level needs both endpoints located, so it needs
-  `link_width = 2` with `directed = true` — parent→child order is data
-  and must not be canonically sorted away.
-- **`links_convention`**:
-  - `"explicit"` — every parent edge materialised in the `links/0/`
-    family.
-  - `"implicit_sequential_with_branches"` *(recommended)* —
-    sequential parents (`parent_of(i) = i - 1`) implicit; the
-    intra-chunk array `links/0/0.0.0` stores only branch links and any
-    links that cross fragment boundaries.  Dramatically reduces storage
-    (e.g. a 10k-vertex neuron with 50 branches stores ~50 link rows).
-    The convention governs only the intra-chunk array; edges that leave
-    a chunk are always explicit.
-- **Per-vertex attributes**: `radius`, `vertex_type` (soma / axon /
-  dendrite), and so on — one row per vertex.
-- **Cross-chunk parents**: parent in chunk A, child in the adjacent
-  chunk one step along `+z` → one `link_width = 2` record in the
-  `links/0/0.0.+1` cell at A, holding `(parent_vi, child_vi)`.  With
-  `directed = true` the order is preserved verbatim and no permutation
-  index is stored.
-- **Multi-Resolution**: path simplification (Douglas-Peucker) keeps
-  branch points and reduces straight-segment density.
+- **Arrays**: `vertices/`, `vertex_fragments/`, and usually a `links/0/`
+  family of parent edges; per-vertex `radius`, `vertex_type` and so on.
+- **`link_width = 2`**, not 1.  `link_width = 1` writes the `self`
+  segment, a bare reference with no offsets, so it cannot name a second
+  chunk; it suits a cross-level parent pointer (`delta ≠ 0`).  A parent
+  edge that may cross a chunk boundary needs both endpoints located.
+- **Parent→child order** MUST survive: `directed = true` stores it
+  verbatim; an undirected canonical family adds `perm_idx` to each
+  cross-chunk record.
+- **`links_convention`**: `"explicit"` writes every parent edge;
+  `"implicit_sequential_with_branches"` *(recommended)* makes
+  `parent_of(i) = i - 1` implicit, so `links/0/0.0.0` holds only branch
+  links and links across fragment boundaries (~50 rows for a 10k-vertex
+  neuron with 50 branches).  Edges that leave a chunk are always written.
+- **Cross-chunk parent**: parent in chunk A, child one step along `+z` →
+  one record `(parent_vi, child_vi)` in the `links/0/0.0.+1` cell at A.
+- **Multi-resolution**: path simplification keeping branch points.
+
+A skeleton written whole has an undirected family with `perm_idx` on its
+cross-chunk arrays; one streamed chunk by chunk has `"directed": true`:
+
+```javascript
+{"kind": "root", "geometry_types": ["skeleton"],
+ "links_convention": "implicit_sequential_with_branches", ...}
+{"kind": "links", "dtype": "int64", "offsets": [[0, 0, 1]], "has_perm": true,
+ "link_width": 2, "level_delta": 0, "nonempty_chunks": [...]}
+```
 
 ## 12.4 Streamlines / Polylines
 
-- **Structure**: ordered sequence of connected points.
-- **Required arrays**: `vertices/`, `vertex_fragments/` (one
-  fragment per streamline segment within each chunk).  No `links/`
-  array.
-- **`links_convention`**: `"implicit_sequential"` — within a
-  fragment, vertex `i` connects to `i + 1`.
-- **Cross-chunk continuation**: a `link_width = 2` record in the
-  `links/0/<offsets>` array for the appropriate direction, written to
-  chunk A's cell, connects a segment's last vertex in chunk A to the
-  next segment's first vertex in the neighbouring chunk.  Set
-  `directed = true` so the along-path order survives.
-- **Object identity**: one object per full streamline; its
-  manifest chains segments across chunks via mode-2 (explicit)
-  manifest blocks if segments are shared across streamlines
-  (`shared_fragments`), or mode-0 / mode-1 otherwise.
-- **Multi-Resolution**: point reduction along paths; pyramid levels
-  carry fewer vertices per streamline.
+- **Arrays**: `vertices/`, `vertex_fragments/` (one fragment per segment
+  per chunk).  No intra-chunk link array.  `line` is the two-vertex case;
+  `polyline` and `streamline` share one layout.
+- **`links_convention`**: `"implicit_sequential"` — vertex `i` connects
+  to `i + 1` within a fragment.
+- **Cross-chunk continuation**: a `link_width = 2` record in
+  `links/0/<offsets>`, in chunk A's cell, joins a segment's last vertex in
+  A to the next segment's first vertex.  Order MUST survive, as for
+  skeletons.  A store whose streamlines each sit in one chunk has no
+  `links/` group.
+- **Objects**: one per streamline; mode-2 manifest blocks chain shared
+  segments (`shared_fragments`), mode 0 / 1 otherwise.
+- **Multi-resolution**: fewer points per streamline at coarser levels.
+
+```javascript
+{"kind": "root", "geometry_types": ["streamline"], "links_convention": "implicit_sequential",
+ "cross_level_storage": "implicit",
+ "format_capabilities": ["preserved_object_ids", "shared_fragments", "multiscale_links"], ...}
+```
 
 ## 12.5 Custom Geometries
 
-- **Extensibility**: writers may add a non-canonical entry to
-  `geometry_types` — readers should treat unknown types as raw
-  vertex + link arrays and skip conformance checks for that type.
-- **Custom links**: arbitrary `link_width` and arbitrary record
-  semantics are supported by the underlying record format.
-- **Validation**: level-4 conformance checks ([§13.1](13-conformance-and-validation.md#131-conformance-levels)) apply only to
-  the canonical geometry-type set; custom types bypass them.
+Writers may add a non-canonical entry to `geometry_types`; readers
+should treat unknown types as raw vertex and link arrays.  A custom
+geometry uses the existing node kinds
+([§3.7](03-terminology-and-concepts.md#37-metadata-terms)), since a
+reader SHOULD reject a `kind` it does not recognise.  Any `link_width`
+and record semantics are allowed.  Level-4 checks
+([§13.1](13-conformance-and-validation.md#131-conformance-levels)) apply
+only to the canonical types.

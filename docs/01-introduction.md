@@ -1,189 +1,200 @@
 # 1. Introduction
 
+This document specifies Zarr Vectors format **0.10.0**.  Its metadata
+layer is the registered
+[Zarr Vectors convention](https://github.com/AllenInstitute/zarr-vectors-convention)
+v0.1.0 ([§1.4.7](#147-zarr-conventions-the-metadata-layer)); this
+document defines the byte layouts inside the cells.  Sections 1–14
+describe 0.10.0 only; earlier versions are in
+[Appendix J](15-appendices.md#appendix-j-change-log).
+
 ## 1.1 Background and Motivation
 
-The increasing scale of scientific and industrial 3D data presents significant challenges for data storage, access, and analysis. Modern applications routinely generate datasets containing millions to trillions of vector objects—point clouds from LiDAR and microscopy, meshes from 3D reconstruction, skeletons from connectomics, and streamlines from tractography. These datasets often require:
+Point clouds from LiDAR and microscopy, meshes from 3D reconstruction,
+skeletons from connectomics and streamlines from tractography now reach
+millions to trillions of objects.  Such data must live in cloud object
+stores, answer spatial queries without loading everything, accept
+incremental and concurrent writes, offer levels of detail, and carry
+annotations on points, objects and groups.
 
-- **Distributed storage and access**: Data must be stored in cloud object stores (S3, GCS, Azure Blob) and accessed from distributed computing environments
-- **Spatial querying**: Efficient retrieval of data within spatial regions without loading entire datasets
-- **Incremental updates**: Ability to add or modify data without regenerating entire files
-- **Multi-resolution visualization**: Support for level-of-detail rendering at different scales
-- **Rich metadata**: Complex annotations at multiple levels (points, objects, groups)
-- **Concurrent access**: Multiple processes or users reading and writing simultaneously
-
-Traditional file formats (LAS, PLY, OBJ, STL) were designed for single-file, single-machine workflows. They lack spatial indexing, multi-resolution support, and distributed write capabilities. While newer formats like 3D Tiles and I3S address visualization needs, they are optimized for streaming and lack the flexibility needed for scientific computing and analysis workflows.
-
-The Zarr Vectors format addresses these limitations by providing a cloud-native, spatially-indexed format that supports distributed uncoordinated reads and writes, native multi-resolution representations, fragment- and object-level re-use across resolution levels, and rich metadata—all built on the proven Zarr v3 storage foundation.
+Single-file formats (LAS, PLY, OBJ, STL) have no spatial index,
+multi-resolution or distributed writes.  3D Tiles and I3S target
+streaming visualization rather than analysis.  Zarr Vectors is a
+cloud-native, spatially indexed format on Zarr v3 with uncoordinated
+writes, native pyramids, and fragment re-use across objects and levels.
 
 ## 1.2 Purpose and Goals
 
-The Zarr Vector Format specification defines a standardized, cloud-native format for storing very large N-dimensional vector objects. The format is designed to:
+The format is designed to:
 
-1. **Enable scalable storage**: Support datasets ranging from thousands to trillions of vector objects
-2. **Facilitate distributed access**: Enable efficient spatial queries and selective data loading from cloud storage
-3. **Support concurrent operations**: Allow multiple processes to read and write data without coordination
-4. **Provide multi-resolution support**: Native support for hierarchical level-of-detail representations
-5. **Enable rich metadata**: Support arbitrary metadata at point, object, and group levels
-6. **Maintain format flexibility**: Support diverse geometry types (point clouds, meshes, skeletons, streamlines) with extensibility for custom types
-7. **Ensure interoperability**: Provide clear migration paths from existing formats and compatibility with common tools
-
-The format is designed to be:
-- **Cloud-native**: Optimized for object storage backends (S3, GCS, Azure Blob) and filesystems
-- **Analysis-friendly**: Supports scientific computing workflows, not just visualization
-- **Extensible**: Allows custom geometry types and metadata schemas
-- **Efficient**: Enables selective access patterns to minimize data transfer and memory usage
+1. Scale from thousands to trillions of vector objects
+2. Answer spatial queries and load selectively from cloud storage
+3. Let processes read and write without coordination
+4. Provide level-of-detail pyramids
+5. Carry metadata at point, object and group level
+6. Cover point clouds, meshes, skeletons, graphs and streamlines, with custom types
+7. Interoperate with existing formats and tools
 
 ## 1.3 Design Principles
 
-The Zarr Vector Format is built on several core design principles:
-
 ### 1.3.1 Cloud-Native Architecture
-The format uses Zarr as its underlying storage mechanism, enabling:
-- Storage in cloud object stores, distributed filesystems, or local filesystems
-- Efficient chunked storage with independent chunk access
-- Support for various storage backends through Zarr's abstraction layer
+Zarr v3 is the storage layer, so a store can live in a cloud object
+store, a distributed filesystem or a local directory, and each chunk is
+read independently.
 
 ### 1.3.2 Spatial Indexing as First-Class Feature
-Spatial organization is fundamental to the format:
-- Data is organized by spatial chunks in N-dimensional space
-- Spatial queries can be answered by identifying relevant chunks
-- Chunk boundaries enable efficient spatial filtering
-- Spatial indexing supports both regular grids and (future) hierarchical structures
+Data is organized into chunks of an N-dimensional grid, so a spatial
+query reads only the chunks it touches.  A level may optionally use
+octree chunks sized by content.
 
 ### 1.3.3 Multi-Resolution Native Support
-Multi-resolution is built into the format structure:
-- Multiple resolution levels are stored as separate Zarr groups
-- Each level can have different spatial chunk sizes
-- Downsampling strategies are specified in metadata
-- Enables progressive loading and level-of-detail visualization
+Each resolution level is a Zarr group with its own bins and,
+optionally, larger chunks.  The coarsening method is recorded in
+metadata.
 
 ### 1.3.4 Distributed Uncoordinated Writes
-The format supports concurrent write operations:
-- Writers can operate on different spatial chunks independently
-- No global coordination required for most operations
-- Chunk-level atomicity through Zarr's storage model
-- Explicit mechanisms for handling cross-chunk objects
+Writers of different chunks need no coordination: every chunk is its own
+cell and fragment numbering is chunk-local.  Objects that span chunks
+are handled by explicit links and manifests.
 
 ### 1.3.5 Rich Metadata at Multiple Levels
-Metadata can be attached at various granularities:
-- **Point-level**: Attributes per vertex (e.g., gene expression, color, intensity)
-- **Object-level**: Properties of geometric entities (e.g., mesh material, streamline properties)
-- **Group-level**: Collections of objects (e.g., cell types, anatomical regions)
-- **Format-level**: Global properties (coordinate systems, resolution levels, geometry types)
+Attributes attach to vertices, fragments, links, objects and groups;
+store-wide properties (axes, CRS, levels, geometry types) sit on the
+root.
 
 ### 1.3.6 Efficient Selective Access Patterns
-The format enables targeted data retrieval:
-- Spatial queries: Load only chunks intersecting a bounding box
-- Attribute queries: Load only specific attribute channels
-- Object queries: Load only vertices belonging to specific objects
-- Multi-resolution queries: Load appropriate resolution level for the task
+A reader can restrict a read by bounding box, attribute channel, object
+or resolution level.
 
 ### 1.3.7 Geometry Type Flexibility
-The format supports diverse geometry types with a unified storage model:
-- Point clouds: Unstructured collections of points
-- Meshes: Connected surfaces or volumes (triangular, quad, tetrahedral)
-- Skeletons: Graph structures representing topology
-- Streamlines/Polylines: Ordered sequences of connected points
-- Custom types: Extensible through metadata
+Point clouds, meshes, skeletons, graphs and streamlines share one
+storage model; custom types extend it through metadata.
 
 ## 1.4 Relationship to Other Formats
 
-The Zarr Vector Format builds upon and extends concepts from several existing formats:
-
 ### 1.4.1 TRX Format (Tractography)
-The TRX format (https://github.com/tee-ar-ex/trx-spec) provides the conceptual foundation:
-- **Path offsets**: TRX's efficient storage of variable-length streamlines inspired the per-chunk fragment-index encoding
-- **Channel dimension**: TRX's approach to storing vertex attributes with a channel dimension is adopted
-- **Metadata model**: TRX's flexible metadata structure influenced the multi-level metadata design
-- **Compatibility**: When spatial indexing is collapsed to a single dimension, Zarr Vectors closely aligns with TRX
+[TRX](https://github.com/tee-ar-ex/trx-spec) is the conceptual
+foundation: its offsets inspired the fragment index, and its per-vertex,
+per-streamline and per-group data map onto attribute arrays.  A
+single-chunk store closely aligns with TRX
+([§14.8](14-examples.md#148-simple-dti-small-volume-trx-aligned)).
 
 ### 1.4.2 OME-Zarr
-OME-Zarr's multi-resolution approach is adapted for vector data:
-- **Multi-resolution structure**: OME-Zarr's pyramid approach is extended to vector geometries
-- **Zarr backend**: Both formats leverage Zarr's chunked storage
-- **Metadata standards**: OME-Zarr's metadata conventions (RFC 4, RFC 5) are followed for coordinate reference systems
-- **Extension model**: OME-Zarr's extensibility model influenced the design
-- **Pyramid chunk-size growth**: OME-Zarr scales image pyramids by shrinking voxel size at coarser levels (so the same chunk count covers a larger physical region).  Zarr Vectors has no voxel concept, so it instead lets each pyramid level override `chunk_shape` directly; coarser levels can use larger chunks while staying nested in the level-0 grid.
+Zarr Vectors adapts OME-Zarr's pyramid model to vector data.  Axes are
+`{name, type, unit}` descriptors with UDUNITS-2 units, as in NGFF RFC 4,
+but live in the root `zarr_vectors.axes`.  Where OME-Zarr grows a
+pyramid by enlarging voxels, Zarr Vectors lets a level override
+`chunk_shape`, nested in the level-0 grid.
+
+A Zarr Vectors store is **not** an OME-Zarr image and writes no NGFF
+`multiscales` block: NGFF's `datasets` must name image arrays and its
+axes allow only 2–3 space dimensions.  The root MAY carry an `ome`
+object that is an OME-Zarr RFC 8 `collection` node (one `zv:level` node
+per level and a `scene` with a `world` coordinate system), so an OME
+collection can name the store by path.  It restates fields of
+`zarr_vectors`, which stay authoritative, and no reader may depend on
+it.
 
 ### 1.4.3 Zarr Specification
-Zarr provides the storage foundation:
-- **Chunked arrays**: Zarr's efficient chunked storage enables spatial indexing
-- **Ragged objects**: per-chunk byte payloads (vertices, fragment-index, links, manifests) carry their own record framing inside the cells of Zarr v3 vlen-bytes arrays — Zarr stores the bytes, Zarr Vectors frames the records
-- **Store abstraction**: Zarr's store interface enables cloud-native storage
-- **Metadata**: Zarr v3's `zarr.json` files carry format metadata under namespaced keys (`zarr_vectors`, `zarr_vectors_level`, `zv_array`)
+Zarr v3 stores the bytes; Zarr Vectors frames the records inside them.
+Each per-chunk quantity is one array of the variable-length `bytes`
+data type (`vlen-bytes` codec) with one cell per spatial chunk.  Both
+are Zarr v3 extensions, which a Zarr implementation must support to open
+the arrays.  Each node's format metadata is one attribute,
+`zarr_vectors`, whose `kind` says what the node is.  Arrays may be
+sharded with `sharding_indexed` or the optional `octree_sharding` codec.
 
 ### 1.4.4 Precomputed Mesh and Annotation Formats
-The Neuroglancer precomputed mesh format influenced multi-resolution mesh design:
-- **Multi-resolution meshes**: Similar approach to storing meshes at multiple levels of detail
-- **Spatial chunking**: Concept of dividing meshes into spatial regions
-- **Draco compression**: Use of Draco for mesh compression
-
-The companion [precomputed annotation format](https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/annotations.md) covers points, lines, axis-aligned bounding boxes, and ellipsoids with per-annotation properties and per-segment relationships.  Zarr Vectors expresses the same primitives via `geometry_types` + per-vertex / per-object attributes + groups; coarsening differs (per-object aggregation vs random-subsample-with-limit).  See Appendix K for the field-by-field mapping.
+The Neuroglancer precomputed mesh format shaped the multi-resolution,
+spatially chunked, Draco-compressed mesh design.  The
+[precomputed annotation format](https://github.com/google/neuroglancer/blob/master/src/datasource/precomputed/annotations.md)
+covers points, lines, boxes and ellipsoids with properties and
+relationships; Zarr Vectors expresses them with `geometry_types`,
+attributes and groups, but coarsens per object rather than by random
+subsampling.  See Appendix K for the field-by-field mapping.
 
 ### 1.4.5 Traditional Formats (LAS, PLY, OBJ, STL)
-While Zarr Vectors addresses limitations of traditional formats, it maintains conceptual compatibility:
-- **Geometry representation**: Standard concepts (vertices, faces, edges) are preserved
-- **Attribute storage**: Traditional attribute concepts map to Zarr Vectors' attribute arrays
-- **Migration paths**: Clear conversion strategies from traditional formats
+Vertices, faces, edges and attributes map directly onto Zarr Vectors
+arrays, so these formats convert in both directions.
 
 ### 1.4.6 Visualization Formats (3D Tiles, I3S)
-Zarr Vectors complements visualization-focused formats:
-- **Different goals**: 3D Tiles/I3S optimize for web streaming; Zarr Vectors optimizes for analysis
-- **Shared concepts**: Spatial indexing and multi-resolution are common themes
-- **Interoperability**: Zarr Vectors data can be converted to visualization formats when needed
+These optimize web streaming; Zarr Vectors optimizes analysis.  Both
+use spatial indexing and multi-resolution, and Zarr Vectors data can be
+converted to them.
+
+### 1.4.7 Zarr Conventions: the Metadata Layer
+
+Zarr Vectors is a file format that uses Zarr v3 as its container, in two
+layers:
+
+- **Metadata**: the
+  [Zarr Vectors convention](https://github.com/AllenInstitute/zarr-vectors-convention)
+  (uuid `66268a61-7833-4995-bbcb-233bb417dae5`, v0.1.0, covering format
+  0.10.0), under the
+  [Zarr Conventions specification](https://github.com/zarr-conventions/zarr-conventions-spec).
+  Each node's properties live in one attribute, `zarr_vectors`, with a
+  required `kind`, and every such node registers the convention in
+  `zarr_conventions`.  The convention's JSON Schema checks each node
+  ([§13.3](13-conformance-and-validation.md#133-validation-tools)).
+- **Cells**: this specification — the byte layouts inside each cell and
+  the rules that span nodes.
+
+| Standard | Where | Role |
+|----------|-------|------|
+| [Zarr v3](https://zarr-specs.readthedocs.io/en/latest/v3/core/index.html) | every node | Container |
+| zarr-extensions [`bytes`](https://github.com/zarr-developers/zarr-extensions/tree/main/data-types/bytes) and [`vlen-bytes`](https://github.com/zarr-developers/zarr-extensions/tree/main/codecs/vlen-bytes) | per-chunk arrays, `groups`, vlen manifests | One byte blob per cell |
+| [Zarr Vectors convention](https://github.com/AllenInstitute/zarr-vectors-convention) v0.1.0 | every node with `zarr_vectors` | All format metadata |
+| [multiscales convention](https://github.com/zarr-conventions/multiscales) v0.1 (uuid `d35379db-88df-4056-af3a-620245f8e347`) | root | `multiscales: {"layout": [{"asset": "0"}, …]}` lists the levels |
+| [proj convention](https://github.com/zarr-conventions/proj) v0.1 (uuid `f17cb550-5864-4468-aeb7-f3180cfb622f`) | root, with a CRS | `proj:projjson`, a PROJJSON object |
+| OME-Zarr RFC 8 | root, optional | `ome` collection node |
+| [`octree_sharding`](https://github.com/Andrew-Keenlyside/zarr-octree) codec | per array, optional | Sparse-index sharding; legacy name `zarr_octree_sharding` |
+
+The root registers the Zarr Vectors convention with its full entry
+(`schema_url`, `spec_url`, `uuid`, `name`, `description`), plus the
+multiscales convention and, with a CRS, the proj convention.  Every
+other node registers the short form `{"uuid": "66268a61-…"}`.
+
+`multiscales` carries no `transform`: every level stores vertices in
+level-0 coordinates.  A coarse level's `bin_shape` and `bin_ratio` live
+only in its own `zarr_vectors` object.
+
+`octree_sharding` is implemented by the `zarr-octree` package.  A store
+chooses it per array; a reader without it cannot read those arrays but
+can read the rest of the store.
 
 ## 1.5 Key Features
 
-The Zarr Vector Format provides several key features that distinguish it from existing formats:
-
-1. **Spatial Chunking**: Data is organized into spatial chunks, enabling efficient spatial queries
-2. **Fragment-Indexed Chunks**: Variable-length per-chunk structures (vertices, links, attributes) are partitioned by a compact byte-level fragment index that supports vertex / link / fragment re-use within and across objects
-3. **Selective Attribute Access**: Attributes are stored with a channel dimension, enabling loading of specific attributes
-4. **Object Groups**: Object identity is preserved across pyramid levels; group-level metadata partitions objects (cell types, brain regions, tracts, …) without imposing a hierarchy
-5. **Cross-Chunk Linking**: Explicit cross-chunk link arrays handle objects that span multiple spatial chunks
-6. **Multi-Resolution Pyramids**: Per-object pyramids with optional cross-pyramid-level link arrays for fragment-level LOD selection, plus per-level `chunk_shape` overrides for scalable coarse levels
-7. **Distributed Writes**: Uncoordinated writes to different spatial chunks enable parallel processing; chunk-local fragment numbering removes the need for global coordination
-8. **Flexible Compression**: Support for various compression codecs, including Draco for geometry
-9. **Rich Metadata**: NGFF-compatible metadata at multiple levels with a LinkML schema
-10. **Extensibility**: Support for custom geometry types, custom attributes, and writer-side capability tokens
+1. **Spatial chunking** for spatial queries, with optional octree chunks
+2. **Fragment-indexed chunks**: a compact per-chunk index partitions vertices and links into fragments that objects and levels can re-use
+3. **Selective attribute access** through per-attribute arrays with a channel dimension
+4. **Objects and groups**: object identity is kept across pyramid levels; groups partition objects without imposing a hierarchy
+5. **Cross-chunk linking** through explicit link arrays
+6. **Multi-resolution pyramids** with optional cross-level links and per-level `chunk_shape`
+7. **Distributed writes** with chunk-local fragment numbering
+8. **Compression and packing**: any Zarr codec, Draco for meshes, sharding (`sharding_indexed` or `octree_sharding`), dense object indexes
+9. **Registered metadata**, checkable against the convention's JSON Schema
+10. **Extensibility**: custom geometry types, attributes and capability tokens
 
 ## 1.6 Target Audiences
 
-This specification is intended for:
-
-- **Format Implementers**: Developers creating libraries and tools to read/write Zarr Vectors files
-- **Application Developers**: Developers building applications that work with large-scale vector data
-- **Data Scientists**: Researchers and analysts working with point clouds, meshes, and related data
-- **Infrastructure Engineers**: Engineers designing storage and compute systems for 3D data
-- **Format Evaluators**: Those considering Zarr Vectors for their use cases and comparing it to alternatives
+Implementers of readers and writers, application developers, data
+scientists working with vector data, infrastructure engineers, and
+those comparing Zarr Vectors with other formats.
 
 ## 1.7 Document Structure
 
-This specification is organized as follows:
+- **Sections 1–4**: introduction, scope, terminology, data model
+- **Sections 5–8**: store structure, spatial indexing, arrays, metadata
+- **Sections 9–12**: multi-resolution, cross-chunk linking, compression, geometry types
+- **Section 13**: conformance and validation
+- **Section 14**: examples
+- **Section 15**: appendices, including the change log
 
-- **Sections 1-4**: Introduction, scope, terminology, and data model—essential reading for understanding the format
-- **Sections 5-8**: Core technical specifications—Zarr store structure, spatial indexing, arrays, and metadata
-- **Sections 9-12**: Advanced features—multi-resolution, cross-chunk linking, compression, and geometry types
-- **Section 13**: Conformance and validation—requirements for compliant implementations
-- **Section 14**: Examples—practical examples demonstrating format usage
-- **Section 15**: Appendices—reference material, schemas, and algorithms
-
-**Reading Paths:**
-- **Quick Start**: Read Sections 1, 2, 4, and 14 (examples)
-- **Implementation**: Read Sections 1-8, 13, and relevant appendices
-- **Advanced Usage**: Read all sections, focusing on 9-12 for specific features
+For a quick start read Sections 1, 2, 4 and 14; to implement, read 1–8,
+13 and the relevant appendices.
 
 ## 1.8 Conventions
 
-Throughout this specification:
-- **Normative text**: Requirements that must be followed for conformance
-- **Informative text**: Explanatory material, examples, and recommendations
-- **Code examples**: Provided in pseudocode or Python-like syntax
-- **Metadata examples**: Provided in JSON format
-- **References**: Links to external specifications and resources
-
-
-
-
-
-
+Normative text states requirements for conformance; informative text
+explains.  MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are used as in
+RFC 2119.  Code is pseudocode or Python; metadata examples are JSON.
