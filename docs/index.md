@@ -11,7 +11,7 @@
 > on top of Zarr v3.  Released to spark conversation.
 
 This specification describes format **0.10.0**.  Its metadata layer is
-the [Zarr Vectors convention](https://github.com/AllenInstitute/zarr-vectors-convention)
+the [Zarr Vectors convention](https://github.com/Andrew-Keenlyside/zarr-vectors)
 v0.1.0; see [§1.4.7](01-introduction.md#147-zarr-conventions-the-metadata-layer).
 
 ```{toctree}

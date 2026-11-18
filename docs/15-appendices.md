@@ -5,8 +5,8 @@
 The **normative** schema for Zarr Vectors metadata is the JSON Schema
 published with the Zarr Vectors convention v0.1.0:
 
-- Schema: <https://raw.githubusercontent.com/AllenInstitute/zarr-vectors-convention/refs/tags/v0.1.0/schema.json>
-- Convention: <https://github.com/AllenInstitute/zarr-vectors-convention/blob/v0.1.0/README.md>
+- Schema: <https://raw.githubusercontent.com/Andrew-Keenlyside/zarr-vectors/refs/tags/v0.1.0/schema.json>
+- Convention: <https://github.com/Andrew-Keenlyside/zarr-vectors/blob/v0.1.0/README.md>
 
 It validates one `zarr.json` document at a time and covers:
 
@@ -250,7 +250,7 @@ Common access patterns and which arrays they touch:
   <https://tee-ar-ex.github.io/trx-python/stable/trx_specifications.html>
 - Zarr v3 specification: <https://zarr-specs.readthedocs.io/>
 - Zarr Vectors convention v0.1.0 (metadata layer; normative JSON
-  Schema): <https://github.com/AllenInstitute/zarr-vectors-convention/blob/v0.1.0/README.md>
+  Schema): <https://github.com/Andrew-Keenlyside/zarr-vectors/blob/v0.1.0/README.md>
 - Zarr Conventions specification:
   <https://github.com/zarr-conventions/zarr-conventions-spec>
 - multiscales convention v0.1:
@@ -366,7 +366,7 @@ Tokens are open-set; readers must tolerate unknown values.
 ### Per-version detail
 
 - **0.10.0** — the metadata moves onto the
-  [Zarr Vectors convention](https://github.com/AllenInstitute/zarr-vectors-convention)
+  [Zarr Vectors convention](https://github.com/Andrew-Keenlyside/zarr-vectors)
   v0.1.0.  Cell payloads are unchanged from 0.9.4.
   - Every node's Zarr Vectors properties sit under one attribute,
     `zarr_vectors`, discriminated by `kind`: `root`, `level`,

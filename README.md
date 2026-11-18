@@ -12,7 +12,7 @@ This is a draft repo exploring what a zarr-based storage specification would be 
 
 This repo describes Zarr Vectors format **0.10.0**.  The format's
 metadata layer is the registered
-[Zarr Vectors convention](https://github.com/AllenInstitute/zarr-vectors-convention)
+[Zarr Vectors convention](https://github.com/Andrew-Keenlyside/zarr-vectors)
 (v0.1.0): every node keeps its properties in one `zarr_vectors`
 attribute and registers the convention in `zarr_conventions`.  The store
 also uses the [multiscales](https://github.com/zarr-conventions/multiscales)

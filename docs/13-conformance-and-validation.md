@@ -121,9 +121,9 @@ Within each validation level, a representative sample of the checks:
 ## 13.3 Validation Tools
 
 - **Convention JSON Schema**: the
-  [Zarr Vectors convention](https://github.com/AllenInstitute/zarr-vectors-convention)
+  [Zarr Vectors convention](https://github.com/Andrew-Keenlyside/zarr-vectors)
   publishes a JSON Schema (draft 2020-12) at
-  `https://raw.githubusercontent.com/AllenInstitute/zarr-vectors-convention/refs/tags/v0.1.0/schema.json`,
+  `https://raw.githubusercontent.com/Andrew-Keenlyside/zarr-vectors/refs/tags/v0.1.0/schema.json`,
   the `schema_url` of the root's registration.  Validate each `zarr.json`
   that carries a `zarr_vectors` attribute against it, with any JSON
   Schema validator (the convention repository ships

@@ -2,7 +2,7 @@
 
 This document specifies Zarr Vectors format **0.10.0**.  Its metadata
 layer is the registered
-[Zarr Vectors convention](https://github.com/AllenInstitute/zarr-vectors-convention)
+[Zarr Vectors convention](https://github.com/Andrew-Keenlyside/zarr-vectors)
 v0.1.0 ([§1.4.7](#147-zarr-conventions-the-metadata-layer)); this
 document defines the byte layouts inside the cells.  Sections 1–14
 describe 0.10.0 only; earlier versions are in
@@ -128,7 +128,7 @@ Zarr Vectors is a file format that uses Zarr v3 as its container, in two
 layers:
 
 - **Metadata**: the
-  [Zarr Vectors convention](https://github.com/AllenInstitute/zarr-vectors-convention)
+  [Zarr Vectors convention](https://github.com/Andrew-Keenlyside/zarr-vectors)
   (uuid `66268a61-7833-4995-bbcb-233bb417dae5`, v0.1.0, covering format
   0.10.0), under the
   [Zarr Conventions specification](https://github.com/zarr-conventions/zarr-conventions-spec).
@@ -143,7 +143,7 @@ layers:
 |----------|-------|------|
 | [Zarr v3](https://zarr-specs.readthedocs.io/en/latest/v3/core/index.html) | every node | Container |
 | zarr-extensions [`bytes`](https://github.com/zarr-developers/zarr-extensions/tree/main/data-types/bytes) and [`vlen-bytes`](https://github.com/zarr-developers/zarr-extensions/tree/main/codecs/vlen-bytes) | per-chunk arrays, `groups`, vlen manifests | One byte blob per cell |
-| [Zarr Vectors convention](https://github.com/AllenInstitute/zarr-vectors-convention) v0.1.0 | every node with `zarr_vectors` | All format metadata |
+| [Zarr Vectors convention](https://github.com/Andrew-Keenlyside/zarr-vectors) v0.1.0 | every node with `zarr_vectors` | All format metadata |
 | [multiscales convention](https://github.com/zarr-conventions/multiscales) v0.1 (uuid `d35379db-88df-4056-af3a-620245f8e347`) | root | `multiscales: {"layout": [{"asset": "0"}, …]}` lists the levels |
 | [proj convention](https://github.com/zarr-conventions/proj) v0.1 (uuid `f17cb550-5864-4468-aeb7-f3180cfb622f`) | root, with a CRS | `proj:projjson`, a PROJJSON object |
 | OME-Zarr RFC 8 | root, optional | `ome` collection node |
