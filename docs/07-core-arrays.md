@@ -364,7 +364,11 @@ parent id, …); the format does not impose a tree.
   fragment index in the same v1 byte layout as
   [§7.3](#73-vertex-fragments) — giving the per-fragment partition of
   link rows.  Each link fragment is the set of link rows belonging to
-  one vertex fragment.
+  one vertex fragment.  A level whose `link_fragments_aligned` flag is
+  set ([§8.3](08-metadata.md#83-resolution-level-metadata)) further guarantees the correspondence is by
+  index: link fragment *k* is vertex fragment *k*'s, empty fragments
+  included, and a record belongs to the vertex fragment holding its
+  first stored endpoint.  Without the flag a reader must not assume it.
 - **Every other array** — any non-zero offset, any `delta ≠ 0` — uses
   an inline self-describing ragged blob and has **no** sidecar.
 - `link_fragments` is keyed by chunk **alone**: it carries no delta and
