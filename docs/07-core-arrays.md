@@ -243,12 +243,14 @@ format imposes no tree.
 
 `link_fragments` is keyed by chunk alone, so exactly one array may
 write it.  Link fragments need not correspond to vertex fragments,
-unless the level sets `link_fragments_aligned: true`: then link
-fragment `k` of every intra-chunk cell holds exactly the records whose
-first endpoint is in vertex fragment `k`, and a reader MAY read the
+unless the level sets `link_fragments_aligned: true`: then the
+correspondence is by index, empty fragments included. Link fragment `k`
+of every intra-chunk cell holds exactly the records whose first stored
+endpoint is a row of vertex fragment `k`, and a reader MAY read the
 links of chosen vertex fragments by reading only those link fragments.
-As with `fragments_tile`, absent means unknown, and a writer that
-breaks the property MUST remove the claim.
+As with `fragments_tile`, absent means unknown: a reader MUST NOT
+assume the correspondence without the flag, and a writer that breaks
+the property MUST remove the claim.
 
 ### Metadata
 
