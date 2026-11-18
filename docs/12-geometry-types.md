@@ -32,9 +32,9 @@ where marked `...` (fields: [§8](08-metadata.md#81-metadata-structure)).
 - **Volume cells**: a volume mesh stores one solid cell per record and
   declares it with the family's `element` (`tetra`, `pyramid`, `wedge`,
   `hexahedron`; [§10.6.6](10-cross-chunk-linking.md#1066-metadata)), so a
-  4-wide record is a tetrahedron rather than a quad.  A family holds one
-  element type, since it has one `link_width`.  Its boundary surface is
-  the cell faces that belong to one cell only.
+  4-wide record is a tetrahedron rather than a quad.  Several types
+  share a family as `element: "mixed"`, padded to the widest.  Its
+  boundary surface is the cell faces that belong to one cell only.
 - **Raw** (`vertices` `encoding: "raw"`): positions in `vertices/`; faces
   inside a chunk in `links/0/0.0.0_0.0.0/`, partitioned by
   `link_fragments/`.
@@ -58,9 +58,12 @@ where marked `...` (fields: [§8](08-metadata.md#81-metadata-structure)).
   - *On the bin lattice* (`coarsening_method: "per_object"`): for each
     object, every 2 × 2 × 2 block of bins the object fills becomes one
     `hexahedron` (from hexahedra) or six `tetra` (from other elements)
-    joining those bins' metavertices.  Cells inverted at the
-    metavertices' positions are dropped.  The volume is filled without
-    gaps, and is accurate to about one bin.
+    joining those bins' metavertices.  Each metavertex on the coarse
+    boundary moves to the centroid of the fine boundary vertices in its
+    bin, which keeps faces of the volume in place (edges and corners
+    round off by up to a bin).  A move that would invert a cell is
+    undone; cells still inverted are dropped.  The volume is filled
+    without gaps.
   - *Decimated elsewhere* (`coarsening_method: "manual"`): any valid
     mesh of the same objects, written as the level.  Its `parent_level`,
     `bin_shape` and `bin_ratio` are recorded as for a built level, and
@@ -70,6 +73,15 @@ where marked `...` (fields: [§8](08-metadata.md#81-metadata-structure)).
   Either way the levels are joined by object ids and cross-level vertex
   links ([§10.8](10-cross-chunk-linking.md#108-cross-pyramid-level-links--optional)),
   not by cells: a cell's vertices are all on one level.
+- **Surface pyramids** (`per_object`): vertex clustering.  Each face is
+  re-pointed at its vertices' bin metavertices; faces left with a
+  repeated metavertex collapse, and faces over the same metavertices are
+  kept once.
+- **Per-face and per-cell attributes** come down with them: a coarse
+  face takes the fine faces that clustered onto it, a coarse cell the
+  fine cells whose centroid lies in its block.  Floating-point values
+  are averaged, weighted by area or volume; integer and boolean values
+  take the value with the most area or volume.
 
 ```javascript
 {"kind": "links_family", "level_delta": 0, "link_width": 3, "directed": false,

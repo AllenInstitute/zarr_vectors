@@ -1379,6 +1379,18 @@
       "title": "LinkAttributeMetadata",
       "type": "object"
     },
+    "LinkElement": {
+      "description": "A links family's `element`.",
+      "enum": [
+        "tetra",
+        "pyramid",
+        "wedge",
+        "hexahedron",
+        "mixed"
+      ],
+      "title": "LinkElement",
+      "type": "string"
+    },
     "LinksConvention": {
       "description": "How intra-chunk links are represented.",
       "enum": [
@@ -1392,6 +1404,157 @@
     "LinksFamilyMetadata": {
       "additionalProperties": true,
       "allOf": [
+        {
+          "if": {
+            "properties": {
+              "element": {
+                "const": "tetra"
+              }
+            },
+            "required": [
+              "element"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "link_width": {
+                "const": 4
+              }
+            },
+            "required": [
+              "link_width"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "element": {
+                "const": "pyramid"
+              }
+            },
+            "required": [
+              "element"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "link_width": {
+                "const": 5
+              }
+            },
+            "required": [
+              "link_width"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "element": {
+                "const": "wedge"
+              }
+            },
+            "required": [
+              "element"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "link_width": {
+                "const": 6
+              }
+            },
+            "required": [
+              "link_width"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "element": {
+                "const": "hexahedron"
+              }
+            },
+            "required": [
+              "element"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "link_width": {
+                "const": 8
+              }
+            },
+            "required": [
+              "link_width"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "element": {
+                "const": "mixed"
+              }
+            },
+            "required": [
+              "element"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "element_types": {
+                "items": {},
+                "type": "array"
+              }
+            },
+            "required": [
+              "element_types"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "element": {
+                "enum": [
+                  "tetra",
+                  "pyramid",
+                  "wedge",
+                  "hexahedron",
+                  "mixed"
+                ]
+              }
+            },
+            "required": [
+              "element"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "level_delta": {
+                "const": 0
+              }
+            },
+            "required": [
+              "level_delta"
+            ],
+            "type": "object"
+          }
+        },
         {
           "if": {
             "properties": {
@@ -1477,6 +1640,17 @@
       "properties": {
         "directed": {
           "type": "boolean"
+        },
+        "element": {
+          "$ref": "#/$defs/LinkElement",
+          "description": "What each record of a `delta = 0` links family is, when it is a volume-mesh cell rather than an edge or a polygon face: one element type (vertices in VTK order), or `mixed`.  Absent: an edge (`link_width` 2) or a polygon face (3 or more)."
+        },
+        "element_types": {
+          "description": "A mixed family's element types.  Records are as wide as the widest; a shorter cell repeats its last vertex, so a record's run of distinct vertices (4, 5, 6 or 8) names its type.",
+          "items": {
+            "$ref": "#/$defs/VolumeElement"
+          },
+          "type": "array"
         },
         "kind": {
           "$ref": "#/$defs/ZarrVectorsKind",
@@ -3216,6 +3390,17 @@
         "variable_length_bytes"
       ],
       "title": "VlenDataType",
+      "type": "string"
+    },
+    "VolumeElement": {
+      "description": "Volume-mesh cells, vertices in VTK order.",
+      "enum": [
+        "tetra",
+        "pyramid",
+        "wedge",
+        "hexahedron"
+      ],
+      "title": "VolumeElement",
       "type": "string"
     },
     "ZarrNode": {

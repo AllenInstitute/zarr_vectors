@@ -52,6 +52,23 @@ imports:
 #                  vertex_attribute fragment_attribute link_attribute
 
 enums:
+  VolumeElement:
+    description: Volume-mesh cells, vertices in VTK order.
+    permissible_values:
+      tetra: {description: 4 vertices; 0-1-2 faces vertex 3 by the right-hand rule.}
+      pyramid: {description: 5 vertices; base quad 0-3 faces the apex 4.}
+      wedge: {description: 6 vertices; triangle 0-1-2 faces away from 3-4-5.}
+      hexahedron: {description: 8 vertices; quad 0-3 faces quad 4-7.}
+
+  LinkElement:
+    description: A links family's `element`.
+    permissible_values:
+      tetra:
+      pyramid:
+      wedge:
+      hexahedron:
+      mixed: {description: Several element types; see `element_types`.}
+
   NodeType:
     permissible_values:
       array:
@@ -666,13 +683,57 @@ classes:
       A `links/<delta>/` group: the policy every offsets array beneath it
       decodes against.
     extra_slots: {allowed: true}
-    slots: [level_delta, link_width, sid_ndim, directed, store, num_links, num_physical_records]
+    slots: [level_delta, link_width, sid_ndim, directed, store, num_links, num_physical_records,
+            element, element_types]
     slot_usage:
       kind: {equals_string: links_family}
       level_delta: {required: true}
       link_width: {required: true}
       directed: {required: true}
       store: {required: true}
+    rules:
+      - description: A `tetra` family's records are 4 wide.
+        preconditions:
+          slot_conditions:
+            element: {equals_string: tetra}
+        postconditions:
+          slot_conditions:
+            link_width: {equals_number: 4}
+      - description: A `pyramid` family's records are 5 wide.
+        preconditions:
+          slot_conditions:
+            element: {equals_string: pyramid}
+        postconditions:
+          slot_conditions:
+            link_width: {equals_number: 5}
+      - description: A `wedge` family's records are 6 wide.
+        preconditions:
+          slot_conditions:
+            element: {equals_string: wedge}
+        postconditions:
+          slot_conditions:
+            link_width: {equals_number: 6}
+      - description: A `hexahedron` family's records are 8 wide.
+        preconditions:
+          slot_conditions:
+            element: {equals_string: hexahedron}
+        postconditions:
+          slot_conditions:
+            link_width: {equals_number: 8}
+      - description: A mixed family lists its element types.
+        preconditions:
+          slot_conditions:
+            element: {equals_string: mixed}
+        postconditions:
+          slot_conditions:
+            element_types: {required: true}
+      - description: Volume elements join the vertices of one level (delta 0).
+        preconditions:
+          slot_conditions:
+            element: {equals_string_in: [tetra, pyramid, wedge, hexahedron, mixed]}
+        postconditions:
+          slot_conditions:
+            level_delta: {equals_number: 0}
 
   LinksMetadata:
     is_a: ZarrVectorsBlock
@@ -992,6 +1053,20 @@ slots:
   store: {range: CrossChunkStore}
   num_links: {range: integer, minimum_value: 0}
   num_physical_records: {range: integer, minimum_value: 0}
+  element:
+    description: >-
+      What each record of a `delta = 0` links family is, when it is a
+      volume-mesh cell rather than an edge or a polygon face: one element
+      type (vertices in VTK order), or `mixed`.  Absent: an edge
+      (`link_width` 2) or a polygon face (3 or more).
+    range: LinkElement
+  element_types:
+    description: >-
+      A mixed family's element types.  Records are as wide as the widest;
+      a shorter cell repeats its last vertex, so a record's run of
+      distinct vertices (4, 5, 6 or 8) names its type.
+    range: VolumeElement
+    multivalued: true
   offsets:
     description: >-
       The `link_width - 1` relative offsets naming the array, each of

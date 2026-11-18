@@ -189,12 +189,22 @@ The orders are VTK's; in them every cell has positive volume.  Absent
 (or `null`), a record is an edge (`link_width` 2) or a polygon face
 (3 or more), so a store without the field reads as before.
 
-- `element` MUST match `link_width`, and MUST NOT appear on a
+`element: "mixed"` holds several types in one family, listed in
+`element_types` (e.g. `["tetra", "hexahedron"]`).  `link_width` is the
+widest type's, and a shorter cell repeats its last vertex to fill the
+record: a tetrahedron `a b c d` in an 8-wide family is stored
+`a b c d d d d d`.  A cell's vertices are distinct, so the length of a
+record before that trailing run (4, 5, 6 or 8) names its type, under
+any read.
+
+- `element` MUST match `link_width` (for `mixed`, the widest of
+  `element_types`), and MUST NOT appear on a
   `delta ≠ 0` family: a cell's vertices are all on one pyramid level.
   They may sit in different chunks, like any record's endpoints.
 - Vertex order MUST survive storage, as for mesh winding
   ([§12.2](12-geometry-types.md#122-meshes)).
-- Writers SHOULD NOT store cells with non-positive signed volume.
+- Writers SHOULD NOT store cells with non-positive signed volume, and
+  MUST NOT store a cell that repeats a vertex.
 - A writer MUST NOT add, change or remove `element` on a family that
   already holds records: that would change what the records mean.
 - A reader that does not recognise the value MUST NOT read the records
@@ -270,8 +280,10 @@ intra-chunk records come first.
    link fragment `k` has its first endpoint in vertex fragment `k` of
    the same chunk, and vice versa.
 9. When present, `element` is one of `tetra`, `pyramid`, `wedge`,
-   `hexahedron`, its width equals `link_width`, and the family's
-   `delta` is 0.
+   `hexahedron` or `mixed`, its width (for `mixed`, the widest of
+   `element_types`) equals `link_width`, and the family's `delta` is 0.
+   In a `mixed` family every record's length before its trailing run of
+   repeats names one of `element_types`.
 
 ### 10.6.9 Worked examples
 
