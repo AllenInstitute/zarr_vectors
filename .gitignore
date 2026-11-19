@@ -3,3 +3,8 @@ __pycache__/
 *.pyc
 .DS_Store
 .venv/
+site/_site/
+site/.src/
+site/.lib-cache/
+site/hub/_generated/
+.zv-site-docs/

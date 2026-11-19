@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zarr Vectors</title>
+<meta name="description" content="Zarr Vectors: scalable storage for points, streamlines, graphs, skeletons and meshes on Zarr v3, with spatial chunks and built-in resolution pyramids.">
+<meta property="og:title" content="Zarr Vectors">
+<meta property="og:description" content="Scalable storage for points, streamlines, graphs, skeletons and meshes on Zarr v3.">
+<meta property="og:image" content="_static/zv-logo.png">
+<link rel="icon" href="_static/favicon.png">
+<link rel="preload" href="_static/fonts/dm-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="home.css">
+<script>
+  // follow the theme chosen in the docs (Furo keeps it in localStorage), else the system's
+  (function () {
+    document.documentElement.classList.add("js");
+    try { var t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+<a class="sr" href="#main">Skip to content</a>
+
+<nav class="zv-bar" aria-label="Zarr Vectors sites">
+  <a class="zv-bar-home" href="@home" aria-current="page"><img src="_static/zv-mark.png" alt="" width="30" height="20"><span>Zarr Vectors</span></a>
+  <span class="zv-bar-links">
+    <a class="zv-bar-link" href="@spec">Spec</a>
+    <a class="zv-bar-link" href="@python">Python</a>
+    <a class="zv-bar-link" href="@tools">Tools</a>
+    <a class="zv-bar-link" href="#ecosystem">Ecosystem</a>
+    <a class="zv-bar-link" href="@ngplatform">ngplatform<span class="zv-ext" aria-hidden="true">&#8599;</span></a>
+  </span>
+  <span class="zv-bar-end">
+    <button class="tt" type="button" id="theme-toggle" data-mode="auto" aria-label="Colour theme: match system">@theme-icons</button>
+    <a class="zv-bar-gh" href="@github" aria-label="Zarr Vectors on GitHub">@github-svg</a>
+  </span>
+</nav>
+
+<main id="main">
+
+<section class="hero" id="hero">
+  <div class="hero-scene" aria-hidden="true"><canvas id="hero-canvas"></canvas></div>
+  <div class="wrap hero-text">
+    <div class="inner">
+      <h1>Scalable storage for points, streamlines, graphs, skeletons and meshes</h1>
+      <p class="lead">Zarr Vectors is a format for N-dimensional vector data on Zarr v3, built to scale. Space is split into chunks, so a reader fetches only the chunks a region touches and separate writers can fill different chunks at once, on a local disk or in S3, GCS or Azure.</p>
+      <div class="actions">
+        <a class="btn primary" href="@spec">Read the spec</a>
+        <a class="btn" href="@python">Python docs</a>
+      </div>
+      <div><span class="install"><code>pip install zarr-vectors</code><button class="copy" type="button" data-copy="pip install zarr-vectors">Copy</button></span></div>
+    </div>
+  </div>
+  <div class="readout" aria-live="polite"><span class="hint" id="hero-hint">Move over the store to query a region</span><span id="hero-read"></span></div>
+</section>
+
+<section class="sec" id="geometries" aria-labelledby="geo-title">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">One model</span>
+      <h2 id="geo-title">Every geometry is vertices, links and objects</h2>
+      <p>Vertices sit in spatial chunks. Links join them, inside a chunk or across its border. Objects are lists of fragments across chunks. Points, streamlines, skeletons, graphs and meshes differ only in how they use these.</p>
+    </div>
+    <div class="geo">
+      <div class="geo-chapters">
+        <article class="chap" data-geo="0">
+          <h3>@icon:points Point clouds</h3>
+          <p>Vertices with any attributes you need: cells, nuclei, microscopy and LiDAR points. A box query returns exactly the points inside it.</p>
+          <a href="@spec12-geometry-types.html#point-clouds">Point clouds in the spec</a>
+        </article>
+        <article class="chap" data-geo="1">
+          <h3>@icon:streamlines Streamlines</h3>
+          <p>Ordered vertices per object, as in tractography. A box query returns every whole streamline that passes through it.</p>
+          <a href="@spec12-geometry-types.html#streamlines-polylines">Streamlines in the spec</a>
+        </article>
+        <article class="chap" data-geo="2">
+          <h3>@icon:skeletons Skeletons</h3>
+          <p>Branching links per object, such as neurons in connectomics. A link that crosses a chunk border records which neighbouring chunk its other end lives in.</p>
+          <a href="@spec12-geometry-types.html#skeletons">Skeletons in the spec</a>
+        </article>
+        <article class="chap" data-geo="3">
+          <h3>@icon:graphs Graphs</h3>
+          <p>Vertices and links of any shape. Numbering is local to each chunk, so separate writers can fill different chunks with no global vertex IDs.</p>
+          <a href="@pythontutorials/data_types/graphs_skeletons.html">Graphs in the Python docs</a>
+        </article>
+        <article class="chap" data-geo="4">
+          <h3>@icon:meshes Meshes</h3>
+          <p>Triangle, quad or tetrahedral faces, stored as links three or four vertices wide, or Draco-encoded chunk by chunk.</p>
+          <a href="@spec12-geometry-types.html#meshes">Meshes in the spec</a>
+        </article>
+      </div>
+      <div class="geo-stage" aria-hidden="true">
+        <canvas id="geo-canvas"></canvas>
+        <div class="geo-steps"><i></i><i></i><i></i><i></i><i></i></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="pyramids" aria-labelledby="pyr-title">
+  <div class="wrap pyr">
+    <div class="sec-head flush">
+      <span class="eyebrow">Built-in pyramids</span>
+      <h2 id="pyr-title">Every scale, from one store</h2>
+      <p>Each coarser level doubles the bin size and merges the vertices in each bin into one at their centroid, so a viewer reads only the level it needs. The levels carry OME-Zarr multiscale metadata, so any viewer can find them.</p>
+      <div class="levels" role="group" aria-label="Resolution level">
+        <button type="button" data-level="0" aria-pressed="true">Level 0</button>
+        <button type="button" data-level="1" aria-pressed="false">Level 1</button>
+        <button type="button" data-level="2" aria-pressed="false">Level 2</button>
+      </div>
+      <p class="pyr-stats" id="pyr-stats" aria-live="polite"></p>
+      <p class="more"><a href="@pythontutorials/multiscale/building_pyramids.html">Building pyramids in Python</a></p>
+    </div>
+    <div class="pyr-scene" aria-hidden="true"><canvas id="pyr-canvas"></canvas></div>
+  </div>
+</section>
+
+<section class="sec" id="start" aria-labelledby="start-title">
+  <div class="wrap">
+    <div class="code-wrap">
+      <div class="sec-head flush">
+        <span class="eyebrow">Start here</span>
+        <h2 id="start-title">Write a store, read a region</h2>
+        <p>Create a store, write points, read back one box and build coarser levels. The same calls work for every geometry, on a local disk or in the cloud.</p>
+      </div>
+      <div>
+        <div class="tabs" role="tablist" aria-label="Example">
+          <button role="tab" id="tab-py" aria-selected="true" aria-controls="pane-py">Python</button>
+          <button role="tab" id="tab-cli" aria-selected="false" aria-controls="pane-cli" tabindex="-1">Command line</button>
+        </div>
+<pre class="code" role="tabpanel" id="pane-py" aria-labelledby="tab-py"><span class="k">import</span> numpy <span class="k">as</span> np
+<span class="k">import</span> zarr_vectors <span class="k">as</span> zv
+
+schema = zv.Schema(
+    bounds=((<span class="s">0.0</span>, <span class="s">0.0</span>, <span class="s">0.0</span>), (<span class="s">1000.0</span>, <span class="s">1000.0</span>, <span class="s">1000.0</span>)),
+    kind=<span class="s">"point_cloud"</span>,
+    layout=zv.Layout(cells=<span class="s">5</span>),
+)
+ds = zv.create(<span class="s">"scan.zarrvectors"</span>, schema=schema)
+rng = np.random.default_rng(<span class="s">42</span>)
+ds.add_points(rng.uniform(<span class="s">0</span>, <span class="s">1000</span>, size=(<span class="s">100_000</span>, <span class="s">3</span>)).astype(np.float32))
+
+<span class="c"># reads only the chunks the box touches</span>
+r = ds.select(bbox=((<span class="s">100</span>, <span class="s">100</span>, <span class="s">100</span>), (<span class="s">200</span>, <span class="s">200</span>, <span class="s">200</span>))).read()
+
+<span class="c"># two coarser levels, each doubling the bin size</span>
+ds.build_pyramid(factors=[(<span class="s">2.0</span>, <span class="s">1.0</span>), (<span class="s">2.0</span>, <span class="s">1.0</span>)])</pre>
+<pre class="code" role="tabpanel" id="pane-cli" aria-labelledby="tab-cli" hidden><span class="c"># a file in, a store out (the format comes from the extension)</span>
+zvtools convert points.csv points.zv --chunk-shape <span class="s">250,250,250</span>
+
+<span class="c"># and back out again</span>
+zvtools convert points.zv points.ply
+
+<span class="c"># streamlines, skeletons, meshes and surfaces too</span>
+zvtools convert tracts.trx tracts.zv
+zvtools convert neuron.swc neuron.zv
+zvtools convert surface.gii surface.zv</pre>
+      </div>
+    </div>
+    <div class="cards">
+      <a class="card" href="@spec"><h3>Specification</h3><p>Store layout, arrays, metadata, spatial indexing, multi-resolution and conformance.</p><span class="go">Read the spec</span></a>
+      <a class="card" href="@python"><h3>zarr-vectors</h3><p>Open a store, select a region or a set of objects, read and edit it, and build new stores.</p><span class="go">Python docs</span></a>
+      <a class="card" href="@tools"><h3>zarr-vectors-tools</h3><p>Convert to and from CSV, PLY, LAS, TRK, TRX, SWC, OBJ, GIfTI, Neuroglancer precomputed and more.</p><span class="go">Tools docs</span></a>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="viewer" aria-labelledby="ng-title">
+  <div class="wrap band">
+    <div>
+      <h2 id="ng-title">See your data in ngplatform</h2>
+      <p>ngplatform is a workspace around Neuroglancer. It opens Zarr, OME-Zarr and Zarr Vectors datasets in the browser, from cloud storage or from files on your computer.</p>
+    </div>
+    <div class="actions">
+      <a class="btn" href="@ngplatform">Open ngplatform <span class="zv-ext" aria-hidden="true">&#8599;</span></a>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="ecosystem" aria-labelledby="eco-title">
+  <div class="wrap">
+    <div class="sec-head short">
+      <span class="eyebrow">Ecosystem</span>
+      <h2 id="eco-title">The format, its libraries and what is built on it</h2>
+    </div>
+    <div class="eco">@ecosystem</div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Zarr Vectors was first specified by Forrest Collman at the Allen Institute for Brain Science.</p>
+    <p>DM Sans and JetBrains Mono under the SIL Open Font License.</p>
+  </div>
+</footer>
+
+<script src="home.js" defer></script>
+</body>
+</html>

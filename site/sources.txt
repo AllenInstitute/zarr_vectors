@@ -1,0 +1,4 @@
+# The library docs pulled into the site at build time, from each repo's own docs folder.
+# site path   repo                                ref    docs dir   look   Read the Docs (named if a build fails)
+python        AllenInstitute/zarr-vectors-py      main   docs       python https://zarr-vectors-py.readthedocs.io/
+tools         AllenInstitute/zarr-vectors-tools   main   docs       tools  https://zarr-vectors-tools.readthedocs.io/

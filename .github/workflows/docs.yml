@@ -1,10 +1,16 @@
 name: Deploy docs
 
+# Builds the whole site with site/build.sh: the front door, this repo's spec (strict, as before) and the
+# Python and tools docs pulled live from their repos. Pull requests build it without deploying; main
+# deploys; the daily run picks up docs changes in the library repos.
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "17 5 * * *"
   workflow_dispatch:
 
 permissions:
@@ -13,7 +19,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
   cancel-in-progress: false
 
 jobs:
@@ -25,13 +31,27 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: pip install -r docs/requirements.txt
+        run: pip install -r site/requirements.txt
+      - name: Install zarr-vectors (the Python docs read its code)
+        run: pip install "git+https://github.com/AllenInstitute/zarr-vectors-py@main" || echo "::warning::zarr-vectors did not install; its API pages may be incomplete"
+      - name: Restore the last good library docs
+        uses: actions/cache/restore@v4
+        with:
+          path: site/.lib-cache
+          key: libdocs-${{ github.run_id }}
+          restore-keys: libdocs-
       - name: Build site
-        run: sphinx-build -b html -W --keep-going docs docs/_build/html
+        run: ZV_BASE="/${{ github.event.repository.name }}/" site/build.sh
+      - name: Keep the library docs for the next run
+        if: github.event_name != 'pull_request'
+        uses: actions/cache/save@v4
+        with:
+          path: site/.lib-cache
+          key: libdocs-${{ github.run_id }}
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/_build/html
+          path: site/_site
 
   deploy:
     needs: build
