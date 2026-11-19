@@ -2,152 +2,225 @@
 
 ## 11.1 Compression Overview
 
-Zarr Vectors applies **per-chunk compression** via Zarr v3's codec pipeline on
-each single-chunk `uint8` blob.  All format-level structure
-(fragment-index, manifest blocks, link records) lives *inside* the
-compressed payload; compression is opaque to record framing.
-
-There is no array-level or store-level compression — each chunk
-compresses independently, and a reader fetching one chunk pays no
-cost for any other chunk.
+Every per-chunk array uses the `vlen-bytes` array-to-bytes codec; a
+compressor, when one is chosen, follows it and applies to each cell
+independently.  Fragment indexes, manifest blocks and link records live
+inside the cell payload, so compression is opaque to record framing.
+There is no array- or store-level compression: reading one cell costs
+nothing for any other.  Sharding ([§11.6](#116-sharding)) changes how
+cells are packed into stored objects, not how each cell is encoded.
 
 ## 11.2 Draco Encoding
 
-Mesh stores may opt into Draco for the vertex+face co-encoding:
+Mesh stores MAY Draco-encode the `vertices` cells of 3-D triangle
+meshes.  Each cell then holds one Draco blob with the chunk's positions
+and intra-chunk faces; the intra-chunk `links/0/` array is omitted, and
+faces that cross chunks stay in `links/`.
 
-- **Use cases**: triangle / tetrahedral meshes; per-chunk Draco blobs
-  hold both positions and face connectivity.
-- **Configuration**: per-writer compression level and quantization
-  (the format does not pin specific Draco settings).
-- **Per-array flag**: `vertices/.zattrs.encoding = "draco"` marks a
-  Draco-encoded vertex array; the `links/0/` companion is
-  omitted (faces live inside the Draco blob).
-- **Decoding**: requires the Draco runtime; readers that don't link
-  Draco see opaque bytes.
+- The `vertices` metadata sets `"encoding": "draco"`; `dtype` and the
+  axis count describe the decoded positions.
+- Positions are quantized relative to the chunk's bounding box, so
+  Draco is lossy.  The format does not pin Draco settings.
+- Draco is applied by the writer inside the cell, not as a Zarr codec.
+  Readers without the Draco runtime see opaque bytes.
 
 ## 11.3 Standard Compression Codecs
 
-**The default is no compressor at all.**  A per-chunk array is created
-with the `vlen-bytes` serializer and an empty compressor list, which
-keeps the fast asynchronous-PUT write path open; the table below is the
-*recommended* pipeline a writer selects explicitly, not what an
-unconfigured store gets.
+**The default is no compressor.**  An uncompressed cell keeps the fast
+write path and stays range-readable
+([§11.6.5](#1165-design-note-byte-range-reads-need-uncompressed-cells)).
 
-A `compressor` chosen when the store is created fixes the codec
-pipeline for the life of that array — Zarr cannot change a codec on an
-existing array — so the choice is made once, up front.  The `"blosc"`
-shorthand resolves to Blosc(Zstd, BITSHUFFLE, `clevel=5`).
+A compressor is fixed when an array is created; Zarr cannot change an
+existing array's codecs.  Each array declares its own pipeline in its
+`zarr.json`, the mix may be heterogeneous, and a reader MUST take each
+array's codecs from its own `zarr.json`.
 
-Recommended pipelines by array:
+The reference implementation's `compressor` argument applies one choice
+to every per-chunk array a call creates (its low-level writers default
+to none; its high-level `zarr_vectors.create()` defaults to `zstd`):
 
-| Array                                        | Dtype                                                                | Compressor                                                          | Shuffle      |
-|----------------------------------------------|----------------------------------------------------------------------|---------------------------------------------------------------------|--------------|
-| `vertices`                                   | user-declared (float or integer; see [§7.1](07-core-arrays.md#71-vertex-positions)) | Blosc(Zstd, clevel=5)                                 | BYTE-SHUFFLE |
-| `vertex_attributes/<name>`                   | user-declared                                                         | Blosc(Zstd, clevel=5)                                               | BYTE-SHUFFLE |
-| `fragment_attributes/<name>`                 | user-declared                                                         | Blosc(Zstd, clevel=5)                                               | BYTE-SHUFFLE |
-| `vertex_fragments`                           | opaque bytes ([§7.3](07-core-arrays.md#73-vertex-fragments))         | none — opaque bytes (see [§11.4](#114-compression-strategy))        | —            |
-| `link_fragments`                             | opaque bytes ([§7.5](07-core-arrays.md#75-vertex-links))             | none — opaque bytes (see [§11.4](#114-compression-strategy))        | —            |
-| `links/<delta>/<offsets>`                    | user-declared integer (width chosen to fit `n_vertices_in_chunk`; see [§7.5](07-core-arrays.md#75-vertex-links)) | Blosc(Zstd, clevel=5)                       | BITSHUFFLE   |
-| `link_attributes/<name>/<delta>/<offsets>`   | user-declared                                                         | Blosc(Zstd, clevel=5)                                               | BYTE-SHUFFLE |
-| `object_index/manifests`                     | vlen-bytes (opaque manifest blob — [§7.6](07-core-arrays.md#76-object-index)) | Blosc(Zstd, clevel=5)                                       | BYTE-SHUFFLE |
-| `object_attributes/<name>`                   | user-declared                                                         | Blosc(Zstd, clevel=5)                                               | BYTE-SHUFFLE |
-| `groups`                                     | vlen-bytes (per-group `int64` id lists)                               | Blosc(Zstd, clevel=5)                                               | BYTE-SHUFFLE |
-| `group_attributes/<name>`                    | user-declared                                                         | Blosc(Zstd, clevel=5)                                               | BYTE-SHUFFLE |
+| `compressor` | Codecs after `vlen-bytes` |
+|--------------|---------------------------|
+| `None` (default), `"none"` | none |
+| `"zstd"` | `{"name": "zstd", "configuration": {"level": 0, "checksum": false}}` |
+| `"blosc"` | `{"name": "blosc", "configuration": {"cname": "zstd", "clevel": 5, "shuffle": "bitshuffle", "typesize": 4, "blocksize": 0}}` |
+| a list of codec objects | the list as given |
 
-**Why BITSHUFFLE for the link arrays** — every link row is
-`link_width` **chunk-local** vertex indices, whose range is
-`[0, n_vertices_in_chunk)`.  The high-order bits are zero and the
-low-order bits are correlated, so bit-level de-correlation is the right
-pre-pass for Zstd.
+Codecs by array kind:
 
-`vertex_fragments` and `link_fragments` bypass the Zarr codec pipeline
-entirely: their chunks are project-internal record framings (see
-[§7.3](07-core-arrays.md#73-vertex-fragments)) and are written as opaque
-bytes via the `FsGroup.write_bytes` path.  See
-[§11.4](#114-compression-strategy) for why the framing stands on its own
-without an outer compressor.
+| Array | Array-to-bytes | Compressor |
+|-------|----------------|------------|
+| Per-chunk arrays ([§7](07-core-arrays.md)) | `vlen-bytes` | writer's choice; none by default |
+| `object_index/manifests`, `groups` | `vlen-bytes` | writer's choice |
+| `object_index/object_ids`, `manifest_spans`, `manifest_blocks` | `bytes` | `zstd` (level 9 in the reference implementation) |
+| `object_attributes/<name>`, `group_attributes/<name>` | `bytes` | writer's choice |
+
+Bit-shuffling suits link arrays: their values are chunk-local indices
+in `[0, n_vertices_in_chunk)`, so the high bits are zero.
 
 ## 11.4 Compression Strategy
 
-- **When to compress**: every per-chunk byte blob is compressed by
-  default.  Writers may opt a specific array out via per-array codec
-  configuration.
-- **Compression levels**: defaults pick Zstd `clevel=5` as a balance
-  between throughput and ratio.  Writers tune as needed.
-- **Mixed compression**: each array carries its own codec pipeline
-  in its Zarr v3 metadata, so the in-store compressor mix can be
-  heterogeneous.
+Fragment indexes and manifest blocks are Zarr Vectors record framings
+inside the bytes the codec pipeline sees; a reader peels the pipeline,
+then runs the framing decoder.  The pipeline uses only standard codecs
+(`vlen-bytes`, `bytes`, `zstd`, `blosc`, `gzip`, `crc32c`,
+`sharding_indexed`, …) plus two optional ones: `octree_sharding`
+([§11.6.3](#1163-the-octree_sharding-codec--optional)) and the
+`zarr_vectors_octree_chunks` marker on octree levels
+([§6.5](06-spatial-indexing.md#65-octree-chunks)), which leaves bytes
+unchanged.
 
-### Fragment-index framing vs. the Zarr codec pipeline
-
-The fragment-index byte layout
-([§7.3](07-core-arrays.md#73-vertex-fragments)) and the manifest-block
-stream ([§7.6](07-core-arrays.md#76-object-index)) are
-**project-internal record framings**.  They live *inside* the raw
-bytes the Zarr codec pipeline sees as opaque uint8 input.  The Zarr
-codec registry has only the standard codecs (`blosc`, `zstd`, `gzip`,
-`shuffle`, `bytes`, …); Zarr Vectors does not register any custom Zarr codec.
-This separation lets a reader peel the codec pipeline (where one is
-applied) and then run the project-internal decoder without coupling
-either layer to the other.
-
-For `vertex_fragments` and `link_fragments` specifically, the default
-goes one step further: **no outer codec is applied at all**.  The
-chunks are written as opaque bytes and the §11.3 codec table lists
-them as "none".  This is a deliberate format-level choice, not an
-oversight, and rests on four observations:
-
-- **Structural framing already compresses.**  The bitmap-discriminated
-  range table + CSR explicit layout
-  ([§7.3.1](07-core-arrays.md#731-design-rationale)) is itself a
-  tight structural compression scheme: the bitmap declares "this
-  fragment is a contiguous run" with one bit, and the range table
-  carries the run's two parameters (`start`, `count`) regardless of
-  the run's length.  A general-purpose codec on top of that has
-  little redundancy left to remove.
-- **Near-incompressible payload.**  After the bitmap factors out the
-  run-length structure, what remains is sparse `int64` row indices
-  (range starts, CSR explicit indices) drawn from a per-chunk address
-  space.  Their entropy is close to the byte-level entropy bound for
-  the typical case; Blosc+Zstd shrink them only marginally.
-- **Decompression on the read-amplification path.**  A bbox query in
-  a region overlapping *N* chunks must parse *N* fragment-index blobs
-  before any vertex byte is fetched.  Even a fast outer codec adds
-  fixed per-blob latency that scales with *N*.  For typical fragment
-  counts (tens to low hundreds per chunk → 100 B to a few KB) the
-  latency saved by skipping decompression dominates the bytes saved
-  by applying it.
-- **Format predictability.**  Keeping fragment-index blobs as raw
-  bytes makes the on-disk layout byte-identical to what
-  `decode_fragments` parses in memory.  A reader can map the blob
-  directly into a zero-copy view without an intermediate
-  decompression buffer.
-
-Stores that must minimise on-disk size MAY wrap the kvstore in an
-outer compression layer (e.g. content-addressed-blob with a Zstd
-codec at the object-store gateway).  The fragment-index format is
-independent of that choice — readers parse the raw blob once any
-outer wrapper has been peeled.
+`vertex_fragments` and `link_fragments` SHOULD be left uncompressed
+even where other arrays are compressed.  Their range table already
+stores each run as two numbers, the remaining sparse indices barely
+compress, and a box query parses one index per chunk before fetching
+any vertex, so decompression latency outweighs the bytes saved.  (The
+reference implementation's single `compressor` argument does compress
+them; a writer that wants this split sets codecs per array.)  Stores
+that must minimise size MAY instead compress at the storage layer.
 
 ## 11.5 Encoding Metadata
 
-Per-array `.zattrs` (under each array group's `zarr.json`) carries:
+Each array's `zarr_vectors` object
+([§7](07-core-arrays.md), [§8.4](08-metadata.md#84-array-level-metadata))
+carries the encoding facts a reader needs outside the codec pipeline:
 
-- `"zv_array"` — discriminator (see [§8.4](08-metadata.md#84-array-level-metadata)).
-- `"dtype"` — canonical numpy dtype string (`"float32"`, `"int64"`,
-  …).  Duplicated outside the codec pipeline so a reader can learn
-  the dtype without materializing the pipeline.
-- `"encoding"` — `"raw"` (default) or `"draco"` (mesh vertices only).
-- `"row_shape"` — `[]` for a scalar attribute, `[C]` for a
-  multi-channel one.  When present it is the authority on column count
-  and MUST NOT be overridden by `channel_names`, which are labels: a
-  genuinely multi-column attribute may carry no names at all.  A reader
-  falls back to `len(channel_names)` only when `row_shape` is absent.
-- `"compression_codec"`, `"shape"`, `"channel_names"`,
-  `"channel_dtype"` — optional, declared per array kind.
-- `"chunk_grid_origin"`, `"nonempty_chunks"` — on every per-chunk
-  array; see [§5.2](05-zarr-store-structure.md#52-zarr-version-requirements).
+| Key | Meaning |
+|-----|---------|
+| `kind` | The array's role |
+| `dtype` | Element dtype (`"float32"`, `"int64"`, …); the only source of it, since every per-chunk array's `data_type` is `variable_length_bytes` |
+| `encoding` | `"raw"` or `"draco"` on `vertices`; `"fragment_index_v1"` on fragment indexes; `"dictionary"` on a categorical attribute |
+| `row_shape` | `[]` or `[C]`; authoritative for column count and MUST NOT be overridden by `channel_names`.  A reader falls back to `len(channel_names)` only when it is absent |
+| `shape`, `channel_names`, `channel_dtype` | Optional, per array kind |
+| `chunk_grid_origin`, `nonempty_chunks` | Every per-chunk array ([§7](07-core-arrays.md#per-chunk-array-keys)) |
 
-The Zarr v3 codec pipeline (`codecs[]` in the standard `zarr.json`
-block) carries the actual codec config; per-array Zarr Vectors metadata
-duplicates only the fields that matter for non-decoding readers.
+Codec and sharding configuration is only in `zarr.json`'s `codecs`.
+
+## 11.6 Sharding
+
+Sharding packs a block of cells of one per-chunk array into one stored
+object (a *shard*) with an index of each cell's byte range, so a reader
+can still fetch one cell alone.  It is optional and changes only
+packing: chunk keys, cell indices, cell contents and the
+`zarr_vectors` metadata (including `nonempty_chunks`) are unchanged.
+
+### 11.6.1 Declaring a shard shape
+
+The root `zarr_vectors` object MAY hold `shard_shape`: cells per shard
+on each axis, an integer when every axis agrees or one value per axis.
+The unit is cells, so one value holds at every pyramid level.  Absent
+means unsharded.
+
+`shard_shape` is a writer default, not a claim about the disk: a
+writer creating a per-chunk array — including one created later, on
+first write — SHOULD shard it with that shape.  Each array's
+`zarr.json` remains the truth, and a reader MUST NOT rely on
+`shard_shape`.  That is why it is a field, not a capability.
+
+A writer MAY also shard the object layer (`object_index/` arrays,
+`object_attributes/<name>`) along rows with `sharding_indexed`.
+
+### 11.6.2 The `sharding_indexed` codec
+
+The standard packing is Zarr v3's core `sharding_indexed` codec,
+readable by any Zarr v3 implementation with sharding support.  The
+array's `chunk_grid` chunk shape is the shard shape, and its only codec
+is `sharding_indexed` over one-cell inner chunks.  A 5 × 5 × 5 grid
+with shard shape 4:
+
+```json
+{
+  "shape": [5, 5, 5],
+  "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [4, 4, 4]}},
+  "codecs": [{
+    "name": "sharding_indexed",
+    "configuration": {
+      "chunk_shape": [1, 1, 1],
+      "codecs": [{"name": "vlen-bytes", "configuration": {}}],
+      "index_codecs": [{"name": "bytes", "configuration": {"endian": "little"}},
+                       {"name": "crc32c"}],
+      "index_location": "end"
+    }
+  }]
+}
+```
+
+Shards sit at `<level>/vertices/c/<i>/<j>/<k>`, indexed by shard: 8
+objects in place of up to 125.  A compressor goes in
+`configuration.codecs` after `vlen-bytes`.
+
+### 11.6.3 The `octree_sharding` codec — optional
+
+A store MAY pack sharded per-chunk arrays with **`octree_sharding`**, a
+Zarr v3 sharding codec registered in zarr-extensions and implemented by
+the `zarr-octree` package.  The array, chunk grid, inner chunk shape
+and codecs, key encoding and fill value mean what they mean with
+`sharding_indexed`; only the shard bytes differ:
+
+| | `sharding_indexed` | `octree_sharding` |
+|-|--------------------|-------------------|
+| Inner chunk order | any | Z-order (Morton), contiguous |
+| Index rows | one per *possible* inner chunk, 16 bytes | one per *stored* inner chunk: Morton code and length, 6 bytes for shards up to 32³ |
+| Grouping | none | runs (e.g. octree leaves near a target size), so a reader fetches a run's wanted cells in one byte range |
+| Locating the index | fixed size | 16-byte footer: index size, CRC-32C, magic |
+
+For a sparse shard the saving is large: `sharding_indexed`'s index of a
+16³-cell shard is 64 KiB however few cells it holds.  The metadata is
+that of `sharding_indexed` less the two index fields, plus a
+writer-only `layout`:
+
+```json
+{
+  "name": "octree_sharding",
+  "configuration": {
+    "chunk_shape": [1, 1, 1],
+    "codecs": [{"name": "vlen-bytes", "configuration": {}}],
+    "layout": {"name": "octree", "configuration": {"target": 100000, "unit": "bytes"}}
+  }
+}
+```
+
+The shard format is defined by the codec's specification
+(`registry/codecs/octree_sharding/README.md` in the zarr-octree
+repository).
+
+- **Names.**  The codec was written as `zarr_octree_sharding` before
+  registration.  A reader that supports the codec MUST accept either
+  name; writers MUST write `octree_sharding`.
+- **Declaration.**  The root `zarr_vectors` object holds
+  `octree_sharding` (the codec's writer configuration, `{}` for
+  defaults), which requires `shard_shape`, and `format_capabilities`
+  lists `octree_sharding`.  Like `shard_shape` it is a writer default;
+  each array's `zarr.json` says which codec it uses.
+- **Readers without zarr-octree cannot read those arrays.**  A Zarr
+  implementation refuses them as an unknown codec, so nothing is
+  misread, but the data is unavailable.  Arrays packed with
+  `sharding_indexed` or unsharded remain readable.  Producers that need
+  the widest readership SHOULD use `sharding_indexed`.
+
+### 11.6.4 Shards and concurrent writers
+
+Writing one cell rewrites its shard.  Writers in different shards are
+independent; writers touching the same shard MUST serialize.  A
+pipeline SHOULD give each worker whole shards, or write unsharded and
+shard once at the end — after presence is rebuilt
+([§7](07-core-arrays.md#per-chunk-array-keys)) and link families are
+finalized ([§10.7](10-cross-chunk-linking.md#107-consistency-guarantees)).
+On an octree level, leaves SHOULD be fitted to the shard grid
+([§6.5](06-spatial-indexing.md#65-octree-chunks)).
+
+### 11.6.5 Design note: byte-range reads need uncompressed cells
+
+An uncompressed cell's stored bytes are the `vlen-bytes` header and
+then the payload verbatim, so a reader that knows which rows it wants
+(a range fragment) can fetch just those bytes, from the cell's object
+or from the inner chunk the shard index names.
+
+**Byte-range reads of zstd-compressed cells are not possible.**  A
+zstd frame (likewise Blosc or gzip) must be decoded from its start, so
+no stored offset corresponds to a given row; the reader fetches and
+decodes the whole cell.  Sharding does not help: the shard index
+locates a compressed cell, not rows inside it.  This is the main reason
+the default has no compressor.  Readers SHOULD range-read only when an
+array's pipeline is exactly `vlen-bytes`, directly or as the only inner
+codec of a sharding codec over one-cell inner chunks.

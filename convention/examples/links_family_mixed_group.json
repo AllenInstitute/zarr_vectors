@@ -1,0 +1,23 @@
+{
+  "zarr_format": 3,
+  "node_type": "group",
+  "attributes": {
+    "zarr_conventions": [
+      {
+        "uuid": "66268a61-7833-4995-bbcb-233bb417dae5"
+      }
+    ],
+    "zarr_vectors": {
+      "kind": "links_family",
+      "level_delta": 0,
+      "link_width": 8,
+      "sid_ndim": 3,
+      "directed": true,
+      "store": "canonical",
+      "num_links": 12,
+      "num_physical_records": 12,
+      "element": "mixed",
+      "element_types": ["tetra", "hexahedron"]
+    }
+  }
+}
