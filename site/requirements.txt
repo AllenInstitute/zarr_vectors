@@ -1,0 +1,7 @@
+# Building the whole site (site/build.sh). The spec alone needs only docs/requirements.txt.
+sphinx>=7.2,<9
+furo>=2024.1.29
+myst-parser>=3.0
+sphinx-copybutton>=0.5.2
+sphinx-argparse>=0.4
+pyyaml

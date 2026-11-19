@@ -1,0 +1,223 @@
+/* Zarr Vectors: the look shared by every docs site (front door, spec, Python, tools).
+   Loaded after each site's own custom.css. Colours come from the logo:
+   magenta #e01073, its pale tint (the logo's shaded triangle: the magenta at 23 %),
+   and #ff72c0 for the same accent on dark backgrounds. */
+
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 100 1000;
+  font-display: swap;
+  src: url("fonts/dm-sans-latin-wght-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DM Sans";
+  font-style: italic;
+  font-weight: 100 1000;
+  font-display: swap;
+  src: url("fonts/dm-sans-latin-wght-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
+}
+
+:root {
+  --zv-magenta: #e01073;
+  --zv-magenta-light: #ff72c0;
+  --zv-tint: rgba(224, 16, 115, 0.23);
+  --zv-tint-soft: rgba(224, 16, 115, 0.08);
+}
+
+/* ── type ─────────────────────────────────────────────────────────────── */
+
+h1, h2, h3, h4 { font-weight: 700; letter-spacing: -0.012em; text-wrap: balance; }
+h1 { letter-spacing: -0.02em; }
+
+/* one code look everywhere: Furo's own code background in both modes */
+.highlight { background: var(--color-code-background) !important; }
+
+/* spec terms and notes keep the accent */
+dl.field-list > dt { color: var(--color-brand-content); }
+.admonition.note { border-left-color: var(--color-brand-primary); }
+
+/* sidebar: names in ink, the page you are on in magenta */
+.sidebar-tree .current-page > .reference { color: var(--color-brand-content); }
+
+/* sidebar: the logo's mark above the site's name */
+.sidebar-logo { max-width: 72px; margin: 0.25rem auto 0; }
+.sidebar-brand-text { font-weight: 700; font-size: 1.05rem; letter-spacing: -0.01em; }
+
+/* ── the top bar linking the sites ────────────────────────────────────── */
+
+.announcement {
+  background: var(--color-background-primary);
+  color: var(--color-foreground-primary);
+  border-bottom: 1px solid var(--color-background-border);
+  height: auto;
+  min-height: 3rem;
+}
+.announcement-content { padding: 0 1rem; text-align: left; }
+
+.zv-bar { display: flex; align-items: center; gap: 1.5rem; min-height: 3rem; }
+.zv-bar a { text-decoration: none; color: var(--color-foreground-secondary); }
+.announcement-content .zv-bar a:hover { color: var(--color-foreground-primary); }
+
+.zv-bar-home, .zv-bar-end { flex-shrink: 0; }
+.zv-bar-home {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-weight: 700; letter-spacing: -0.01em;
+}
+.announcement-content .zv-bar .zv-bar-home { color: var(--color-foreground-primary); }
+.zv-bar-home img { width: 30px; height: auto; display: block; }
+
+.zv-bar-links { display: flex; gap: 1.25rem; }
+.zv-bar-link { position: relative; padding: 0.875rem 0; font-size: 0.9375rem; }
+.announcement-content .zv-bar .zv-bar-link[aria-current] { color: var(--color-foreground-primary); }
+.zv-bar-link[aria-current]::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0.45rem;
+  height: 2px; border-radius: 1px; background: var(--color-brand-primary);
+}
+.zv-ext { font-size: 0.8em; margin-left: 0.15em; opacity: 0.7; }
+.zv-bar-end { margin-left: auto; display: flex; align-items: center; gap: 1.1rem; }
+.zv-bar-gh { display: flex; padding: 0.5rem 0; }
+.zv-bar .theme-toggle { padding: 0.5rem 0; }
+.zv-bar .theme-toggle svg { width: 1.2rem; height: 1.2rem; color: var(--color-foreground-secondary); }
+.zv-bar .theme-toggle:hover svg { color: var(--color-foreground-primary); }
+/* the bar's toggle replaces Furo's own */
+.theme-toggle-header, .theme-toggle-content { display: none !important; }
+
+@media (max-width: 40em) {
+  .announcement-content { padding: 0 0.75rem; }
+  .zv-bar { gap: 0.75rem; }
+  .zv-bar-home span, .zv-bar .zv-ext { display: none; }
+  .zv-bar-home img { width: 24px; }
+  .zv-bar-links { gap: 0.75rem; }
+  .zv-bar-link { font-size: 0.8125rem; }
+  .zv-bar-gh { display: none; }
+}
+
+/* ── the front door ───────────────────────────────────────────────────── */
+
+/* the front door's pages (landing, ecosystem) are wide and have no sidebars */
+body:has(.zv-wide) .sidebar-drawer,
+body:has(.zv-wide) .toc-drawer,
+body:has(.zv-wide) .toc-overlay-icon,
+body:has(.zv-wide) .content-icon-container,
+body:has(.zv-wide) .related-pages,
+body:has(.zv-wide) .mobile-header .header-left,
+body:has(.zv-wide) .mobile-header .header-center { visibility: hidden; }
+body:has(.zv-wide) .sidebar-drawer, body:has(.zv-wide) .toc-drawer, body:has(.zv-wide) .related-pages { display: none; }
+body:has(.zv-wide) .main { justify-content: center; }
+body:has(.zv-wide) .content { width: min(68rem, 100%); padding: 0 1.5rem; }
+body:has(.zv-landing) article { padding-top: 0; }
+@media (max-width: 40em) { body:has(.zv-wide) .content { padding: 0 1rem; } }
+
+/* Furo pulls headings out by half a rem (for its link highlight); on the landing and in cards they sit on the text edge */
+.zv-landing h1, .zv-landing h2, .zv-landing h3, .zv-card h3 { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }
+
+.zv-landing > section { padding: 3.5rem 0; border-top: 1px solid var(--color-background-border); }
+.zv-landing > section:first-child { border-top: 0; }
+.zv-landing h2 { font-size: 1.6rem; margin: 0 0 0.5rem; }
+.zv-landing .zv-sub { color: var(--color-foreground-secondary); max-width: 40rem; margin: 0 0 2rem; }
+
+.zv-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr); gap: 3rem; align-items: center; }
+.zv-hero h1 { font-size: clamp(2rem, 1.2rem + 2.6vw, 3rem); line-height: 1.08; margin: 0 0 1.25rem; }
+.zv-hero .zv-lead { font-size: 1.125rem; line-height: 1.6; color: var(--color-foreground-secondary); max-width: 34rem; margin: 0 0 2rem; }
+.zv-hero-logo { width: 100%; max-width: 26rem; justify-self: center; }
+@media (max-width: 52em) {
+  .zv-hero { grid-template-columns: 1fr; gap: 1.5rem; }
+  .zv-hero-logo { order: -1; max-width: 15rem; justify-self: start; }
+}
+
+.zv-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+.zv-btn {
+  display: inline-flex; align-items: center; min-height: 2.75rem; padding: 0 1.25rem;
+  border-radius: 6px; font-weight: 600; text-decoration: none;
+  border: 1px solid var(--color-background-border); color: var(--color-foreground-primary);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.zv-btn:hover { border-color: var(--color-foreground-muted); color: var(--color-foreground-primary); }
+.zv-btn.zv-primary { background: var(--zv-magenta); border-color: var(--zv-magenta); color: #fff; }
+.zv-btn.zv-primary:hover { background: #c50d64; border-color: #c50d64; color: #fff; }
+a.zv-btn:visited { color: var(--color-foreground-primary); }
+a.zv-btn.zv-primary:visited { color: #fff; }
+
+.zv-install {
+  display: inline-flex; align-items: center; gap: 0.5rem; min-height: 2.75rem; padding: 0 0.5rem 0 0.875rem;
+  border-radius: 6px; background: var(--color-code-background); font-family: var(--font-stack--monospace); font-size: 0.875rem;
+}
+.zv-install code { white-space: nowrap; background: none; border: 0; padding: 0; font-size: inherit; }
+.zv-copy {
+  font: inherit; font-family: var(--font-stack); font-size: 0.8125rem; cursor: pointer;
+  border: 0; border-radius: 4px; padding: 0.35rem 0.6rem; min-height: 2rem;
+  background: transparent; color: var(--color-foreground-secondary);
+}
+.zv-copy:hover { color: var(--color-foreground-primary); background: var(--color-background-hover); }
+
+/* geometries */
+.zv-geoms { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem; }
+.zv-geom { padding: 1.25rem 1rem 1.25rem; border-radius: 8px; background: var(--color-background-secondary); }
+.zv-geom svg { width: 100%; max-width: 7.5rem; height: auto; display: block; margin: 0 0 1rem; }
+.zv-geom h3 { font-size: 1rem; margin: 0 0 0.35rem; }
+.zv-geom p { font-size: 0.875rem; line-height: 1.5; color: var(--color-foreground-secondary); margin: 0; }
+@media (max-width: 60em) { .zv-geoms { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 36em) {
+  .zv-geoms { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .zv-geom:last-child { grid-column: span 2; }
+}
+
+/* drawing style taken from the logo: white nodes ringed in magenta, magenta links, tinted faces */
+.zv-ico { --ink: var(--zv-magenta); }
+.zv-ico .l { stroke: var(--ink); stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.zv-ico .n { fill: #fff; stroke: var(--ink); stroke-width: 3; }
+.zv-ico .f { fill: var(--zv-tint); stroke: none; }
+.zv-ico .c { fill: var(--ink); }
+
+/* ways in, ecosystem cards */
+.zv-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+@media (max-width: 52em) { .zv-cards { grid-template-columns: 1fr; } }
+.zv-card {
+  display: flex; flex-direction: column; gap: 0.5rem; padding: 1.5rem;
+  border: 1px solid var(--color-background-border); border-radius: 8px;
+  text-decoration: none; color: inherit; transition: border-color 0.15s ease;
+}
+a.zv-card:hover { border-color: var(--color-brand-primary); color: inherit; }
+a.zv-card:visited { color: inherit; }
+.zv-card h3 { font-size: 1.125rem; margin: 0; }
+.zv-card p { margin: 0; color: var(--color-foreground-secondary); line-height: 1.55; }
+.zv-card .zv-go { margin-top: auto; padding-top: 0.75rem; color: var(--color-brand-content); font-weight: 600; font-size: 0.9375rem; }
+.zv-card code { font-size: 0.8125rem; }
+
+.zv-band { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2rem; align-items: center; }
+.zv-band p { margin: 0; color: var(--color-foreground-secondary); max-width: 40rem; }
+@media (max-width: 52em) { .zv-band { grid-template-columns: 1fr; gap: 1.25rem; } }
+
+.zv-credit { font-size: 0.875rem; color: var(--color-foreground-muted); }
+
+/* the ecosystem page */
+.zv-eco { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 1rem 0 2.5rem; }
+@media (max-width: 46em) { .zv-eco { grid-template-columns: 1fr; } }
+.zv-eco .zv-card { gap: 0.6rem; }
+.zv-eco-head { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.zv-role {
+  font-size: 0.75rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 0.15rem 0.5rem; border-radius: 999px;
+  background: var(--color-background-secondary); color: var(--color-foreground-secondary);
+}
+.zv-role.core { background: var(--zv-tint-soft); color: var(--color-brand-content); }
+.zv-eco-links { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-top: auto; padding-top: 0.5rem; font-weight: 600; font-size: 0.9375rem; }
+.zv-eco-links a { text-decoration: none; }
+.zv-eco .zv-install { min-height: 2.25rem; font-size: 0.8125rem; align-self: flex-start; }
+.zv-repo { font-family: var(--font-stack--monospace); font-size: 0.8125rem; color: var(--color-foreground-muted); }
+
+/* in dark mode the magenta lifts; nodes keep their white fill, as on the logo */
+@media (prefers-color-scheme: dark) {
+  body:not([data-theme="light"]) .zv-ico { --ink: var(--zv-magenta-light); }
+}
+body[data-theme="dark"] .zv-ico { --ink: var(--zv-magenta-light); }
+
+@media (max-width: 380px) { .zv-bar, .zv-bar-links { gap: 0.55rem; } }

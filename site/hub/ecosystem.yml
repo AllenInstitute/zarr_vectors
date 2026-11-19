@@ -1,0 +1,79 @@
+# The Zarr Vectors projects, grouped as they appear on the Ecosystem page.
+# role: core | convention | extension | viewer | application  (only core is shown in magenta)
+# Links are written out in full; the build script rewrites the Allen docs addresses for the test site.
+- group: The format
+  items:
+    - name: Zarr Vectors specification
+      role: core
+      repo: AllenInstitute/zarr_vectors
+      text: >-
+        The format itself: store layout, arrays, metadata, spatial indexing,
+        multi-resolution, cross-chunk links, encodings and conformance. A draft,
+        released to start the conversation.
+      links: {Read the spec: "@spec"}
+    - name: Zarr convention
+      role: convention
+      repo: Andrew-Keenlyside/zarr-vectors
+      text: >-
+        The metadata layer of the format, proposed as a Zarr convention: a JSON
+        schema and validator for the attributes that mark a node as part of a
+        Zarr Vectors store. It does not define the cell encodings; the
+        specification does.
+      links: {}
+- group: Libraries
+  items:
+    - name: zarr-vectors
+      role: core
+      repo: AllenInstitute/zarr-vectors-py
+      pip: zarr-vectors
+      text: >-
+        The Python library: open a store, select a region or a set of objects,
+        read and edit it; build stores with ingest converters, pyramid builders
+        and exporters. Local disk, S3, GCS or Azure.
+      links: {Docs: "@python"}
+    - name: zarr-vectors-tools
+      role: core
+      repo: AllenInstitute/zarr-vectors-tools
+      pip: zarr-vectors-tools
+      text: >-
+        Converters and workflows on top of zarr-vectors: CSV, PLY, LAS, TRK,
+        TRX, SWC, OBJ, GIfTI, Neuroglancer precomputed and more, with
+        resolution pyramids and the zvtools command line.
+      links: {Docs: "@tools"}
+- group: Extensions
+  items:
+    - name: zarr-octree
+      role: extension
+      repo: Andrew-Keenlyside/zarr-octree
+      text: >-
+        A sharding codec that groups neighbouring chunks along an octree's
+        Z-order into objects of bounded size, without changing the chunk grid
+        Zarr sees. Built for point clouds in zarr-vectors.
+      links: {Codec spec: "https://github.com/Andrew-Keenlyside/zarr-octree/blob/main/registry/codecs/octree/README.md"}
+- group: Viewer
+  items:
+    - name: ngplatform
+      role: viewer
+      repo: AllenInstitute/ngplatform
+      text: >-
+        A workspace around Neuroglancer that shows Zarr, OME-Zarr and Zarr
+        Vectors datasets, with plugins for track filtering, registration,
+        annotation and segmentation. Runs in the browser.
+      links: {Open ngplatform: "@ngplatform", Docs: "https://ngplatform.readthedocs.io/"}
+- group: Built on Zarr Vectors
+  items:
+    - name: zvCFD
+      role: application
+      repo: Andrew-Keenlyside/zvCFD
+      text: >-
+        GPU computational fluid dynamics, with every geometry, mesh and result
+        held in Zarr Vectors stores.
+      links: {Docs: "https://zvcfd.readthedocs.io/"}
+    - name: zvDVC
+      role: application
+      repo: Andrew-Keenlyside/zvDVC
+      text: >-
+        GPU digital volume correlation for tomography too large for existing
+        tools. Search points and results live in Zarr Vectors stores, whose
+        chunk grid is its unit of work.
+      links: {Docs: "https://zvdvc.readthedocs.io/"}
