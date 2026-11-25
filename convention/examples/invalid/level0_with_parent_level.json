@@ -1,0 +1,25 @@
+{
+  "zarr_format": 3,
+  "node_type": "group",
+  "attributes": {
+    "zarr_conventions": [
+      {
+        "uuid": "66268a61-7833-4995-bbcb-233bb417dae5"
+      }
+    ],
+    "zarr_vectors": {
+      "kind": "level",
+      "level": 0,
+      "vertex_count": 2000000,
+      "arrays_present": [
+        "vertices",
+        "vertex_fragments",
+        "vertex_attributes",
+        "object_index"
+      ],
+      "coarsening_method": "none",
+      "fragments_tile": true,
+      "parent_level": 3
+    }
+  }
+}

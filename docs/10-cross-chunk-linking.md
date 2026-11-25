@@ -2,120 +2,66 @@
 
 ## 10.1 Problem Statement
 
-Many objects span more than one spatial chunk — a neuron skeleton
-that runs through six chunks, a streamline whose path crosses
-several boundaries, a mesh with triangle faces straddling a seam.
-Within a chunk, vertex indices are chunk-local and have no global
-meaning; some additional structure must carry connectivity across
-chunk boundaries.
+Many objects span several chunks — a skeleton through six chunks, a
+streamline across several seams, a mesh with faces straddling one.
+Vertex indices are chunk-local, so connectivity across chunks needs its
+own structure.  Two cases share one array family,
+`links/<delta>/<offsets>/`:
 
-This chapter covers **two distinct cross-chunk concepts** that the
-schema treats uniformly under one array family:
+- **Cross-chunk links** at one level (`delta = 0`): endpoints in
+  different chunks of the same level.
+- **Cross-level links** (`delta ≠ 0`): endpoints at the source level
+  paired with endpoints at `source + delta`.
 
-- **Cross-spatial-chunk links** at one resolution level
-  (`delta = 0`).  Endpoints in two different chunks at the SAME
-  pyramid level — the classic "two chunks of one skeleton, with an
-  edge linking them."
-- **Cross-pyramid-level links** between resolution levels
-  (`delta ≠ 0`).  Endpoints at the source level paired with endpoints
-  at `source + delta`.  When the coarse level also grows
-  `chunk_shape`, the source-side chunk coord and target-side chunk
-  coord differ for the same physical region.
-
-Both kinds live under `links/<delta>/<offsets>/` with identical record
-structure; the `<delta>` path segment declares which case applies.
-
-Connectivity is **one** array family, and **an intra-chunk link is
-simply a link whose relative offsets are all zero** — see
-[§10.6](#106-on-disk-layout-the-links-family).  Factoring the
-relationship between endpoints into the *path* rather than into the
-cell coordinate is what makes every link array an ordinary chunk-grid
-array: it shards, enumerates and validates exactly like `vertices`
-does, and a record never names a chunk at all.
+An intra-chunk link is a link whose offsets are all zero
+([§10.6](#106-on-disk-layout-the-links-family)).  Because the endpoint
+relationship is in the *path*, every link array is an ordinary
+chunk-grid array that shards, enumerates and validates like
+`vertices`, and no record names a chunk.
 
 ## 10.2 Strategy 1: Boundary Deduplication
 
-- **Principle**: vertices on chunk boundaries are duplicated into
-  both adjacent chunks.  Connectivity is implicit by coordinate
-  matching at read time.
-- **Setting**: `cross_chunk_strategy = "boundary_deduplication"`.
-- **Cost**: one extra vertex row per shared boundary point (and one
-  extra fragment entry).
-- **Advantages**: simplest read path — readers don't need to consult
-  any cross-chunk index.
-- **Disadvantages**: requires precise coordinate alignment; floating-
-  point round-trips can de-align "shared" points; doesn't scale to
-  cross-pyramid-level cases.
+With `cross_chunk_strategy = "boundary_deduplication"`, vertices on a
+seam are duplicated into both chunks and connectivity is recovered by
+coordinate matching.  It is the simplest read path but costs one extra
+vertex (and fragment entry) per shared point, needs exact coordinate
+agreement (float round-trips can break it), and cannot express
+cross-level links.
 
 ## 10.3 Strategy 2: Explicit Cross-Chunk Links
 
-![Toy Example of A 1d graph coarsening](images/multi-scale-coarsening.png)
-
-- **Principle**: each cross-chunk edge or face is written as one
-  record in `links/<delta>/<offsets>/`, in the cell of its **source**
-  chunk, where the `<offsets>` path segment says where the other
-  endpoints sit relative to that source (see
-  [§10.6](#106-on-disk-layout-the-links-family)).
-- **Setting**: `cross_chunk_strategy = "explicit_links"` (the
-  default).  The strategy tokens are semantic: they say how a writer
-  reconciles geometry that straddles a boundary, not where the records
-  are stored.
-- **Record format**: see [§7.5](07-core-arrays.md#75-vertex-links).
-  Each record carries `link_width` chunk-local vertex indices, one per
-  endpoint.  `link_width = 2` is the generic edge; `link_width = 3` is
-  a triangle face; `link_width = 1` is a single child reference (used
-  by metanode drill-down).  The chunk each endpoint lives in is
-  recovered from the cell coordinate plus the offsets segment — no
-  chunk coords appear in the record payload.
-- **Per-edge attributes** *(optional)*:
-  `link_attributes/<name>/<delta>/<offsets>/` — the same offsets
-  segments over the same cells, one row per record in the matching
-  link cell.
-- **Advantages**: explicit, no coordinate matching needed, supports
-  arbitrary `link_width`, scales to cross-pyramid-level links via
-  `delta ≠ 0`, and makes "all records leaving chunk A in direction d"
-  a single array-cell read.
+With `cross_chunk_strategy = "explicit_links"` (the default), each
+cross-chunk edge or face is one record in `links/<delta>/<offsets>/`,
+in the cell of its **source** chunk; the offsets segment locates the
+other endpoints.  Records hold `link_width` chunk-local indices
+([§7.5](07-core-arrays.md#75-vertex-links)); per-link attributes, if
+any, are in `link_attributes/<name>/<delta>/<offsets>/`, row for row.
+It needs no coordinate matching, supports any `link_width`, extends to
+cross-level links, and makes "all records leaving chunk A in direction
+d" one cell read.
 
 ## 10.4 Strategy Selection
 
-Stores set `cross_chunk_strategy` in root metadata; the default is
-`"explicit_links"`.  The third option, `"both"`, emits both
-representations — useful for stores whose readers may not all support
-explicit cross-chunk links.
+`cross_chunk_strategy` is a root key; `"both"` writes both
+representations, for readers that may not support explicit links.
 
-Picking guidance:
-
-| Use case                                                 | Strategy                |
-|----------------------------------------------------------|-------------------------|
-| Skeleton with strict integer voxel-coordinate vertices   | either; deduplication is simplest |
-| Streamline / polyline with float vertices                | `explicit_links`        |
-| Mesh with shared rim triangles                           | `explicit_links` (link_width=3) |
-| Any pyramid with chunk-scale growth                      | `explicit_links` (required for cross-pyramid records) |
+| Use case | Strategy |
+|----------|----------|
+| Skeleton with integer voxel-coordinate vertices | either; deduplication is simplest |
+| Streamline or polyline with float vertices | `explicit_links` |
+| Mesh with faces across seams | `explicit_links` (`link_width = 3`) |
+| Pyramid with cross-level links | `explicit_links` (required) |
 
 ## 10.5 Object Index for Cross-Chunk Objects
 
-When an object spans chunks, its manifest in `object_index/manifests`
-carries one block per chunk it touches.  Each block names one chunk and
-a fragment reference (mode-0 / mode-1 / mode-2).  To reconstruct the
-object, a reader:
-
-1. Reads the object's manifest blob from `object_index/manifests` at
-   row `object_id`.
-2. For each block, decodes the named chunk's
-   `vertex_fragments/<chunk>` to find which rows of
-   `vertices/<chunk>` belong to the object.
-3. Optionally reads the non-intra offsets arrays under `links/0/` at
-   those chunks to recover edges bridging them.
-
-The manifest blocks do NOT themselves carry cross-chunk *edges* — they
-carry chunk + fragment references.  A manifest references vertex
-fragments only.
+An object spanning chunks has one manifest entry per fragment it uses,
+in any chunk ([§7.6](07-core-arrays.md#76-object-index)).  To
+reconstruct it, a reader reads its manifest, decodes each named chunk's
+`vertex_fragments` cell to find the object's rows, and, if it needs the
+edges between chunks, reads the non-intra arrays under `links/0/` at
+those chunks.  Manifests reference vertex fragments only, never edges.
 
 ## 10.6 On-Disk Layout: The Links Family
-
-Connectivity is **one** array family: `links/<delta>/<offsets>/`, with
-`link_attributes/<name>/<delta>/<offsets>/` mirroring it.  An
-intra-chunk link is a link whose relative offsets are all zero.
 
 ### 10.6.1 Array tree
 
@@ -126,77 +72,54 @@ intra-chunk link is a link whose relative offsets are all zero.
 /<level>/link_attributes/<name>/<delta>/<offsets>/   # ARRAY  — mirrors cell-for-cell
 ```
 
-Each `<offsets>` array is an ordinary per-chunk array in the sense of
-[§5.2](05-zarr-store-structure.md#52-zarr-version-requirements): a
-rank-`sid_ndim` vlen-bytes array over the level's chunk grid, one cell
-per spatial chunk, cell files at `c/<i>/<j>/<k>`, with
-`chunk_grid_origin` and `nonempty_chunks` attributes and optional
-sharding.  Because the relationship between endpoints is factored into
-the *path* rather than into the cell coordinate, link arrays shard and
-enumerate exactly like `vertices` does.
-
-There is no array at `links/<delta>` itself — it is always a group.
+Each `<offsets>` array is an ordinary per-chunk array
+([§7](07-core-arrays.md#per-chunk-array-keys)), optionally sharded
+([§11.6](11-compression-and-encoding.md#116-sharding)).  `links/<delta>`
+is always a group, never an array.
 
 ### 10.6.2 The `<delta>` segment
 
-The signed pyramid-level delta, written `0`, `+N`, `-N`.  The leading
-`+` is preserved so a directory listing distinguishes positive deltas
-from the unsigned `0` at a glance.  It says how many pyramid levels the
-record spans: `0` is intra-level, `±N` reaches `N` levels coarser or
-finer.
+The signed number of pyramid levels the record spans, written `0`,
+`+N` or `-N`; the `+` is kept so listings distinguish it from `0`.
 
 ### 10.6.3 The `<offsets>` segment
 
-The offsets segment says where the record's *other* endpoints sit
-**relative to its source chunk**, which is the cell that holds it.  It
-carries `link_width - 1` offsets, each an `sid_ndim`-tuple of signed
-integers written with the same convention as the delta; components are
-joined by `.` and offsets by `_`.
+The positions of the record's *other* endpoints relative to its source
+chunk (the cell holding it): `link_width - 1` offsets, each `sid_ndim`
+signed integers written like the delta, components joined by `.` and
+offsets by `_`.
 
 | Segment | `L` | Meaning |
 |---------|-----|---------|
-| `0.0.0` | 2 | intra-chunk edge — both endpoints in the source chunk |
-| `0.0.+1` | 2 | edge to the neighbour one chunk along `+z` |
-| `0.0.-1` | 2 | edge to the neighbour one chunk along `-z` |
+| `0.0.0` | 2 | intra-chunk edge |
+| `0.0.+1` | 2 | edge to the neighbour along `+z` |
+| `0.0.-1` | 2 | edge to the neighbour along `-z` |
 | `0.0.0_0.0.0` | 3 | intra-chunk triangle |
-| `0.0.+1_0.+1.0` | 3 | triangle spanning the source, `+z`, and `+y` |
-| `self` | 1 | `link_width == 1`; no other endpoint to locate |
+| `0.0.+1_0.+1.0` | 3 | triangle spanning the source, `+z` and `+y` |
+| `self` | 1 | no other endpoint |
 
-The implicit `o_0` — the source chunk itself, always zero — is never
-encoded.  Record component `vi_k` is a vertex row index **local to
-chunk `src + o_k`**.
+The source's own offset `o_0 = 0` is not encoded.  Record component
+`vi_k` is a row of chunk `src + o_k`.  A reader MUST enforce:
 
-Directory-name invariants, which a reader MUST enforce:
-
-1. The segment carries exactly `link_width - 1` offsets, or is the
-   literal `self`.
-2. Every offset has exactly `sid_ndim` components.
-3. The segment is `self` **iff** `link_width == 1`.
+1. the segment has exactly `link_width - 1` offsets, or is `self`;
+2. every offset has exactly `sid_ndim` components;
+3. the segment is `self` iff `link_width == 1`.
 
 ### 10.6.4 Per-cell payload
 
-Two encodings, selected by one condition:
-
 | Condition | Encoding | Sidecar |
 |-----------|----------|---------|
-| `delta == 0` **and** offsets all zero | flat concatenated rows | `link_fragments/<chunk>` |
-| otherwise | inline self-describing ragged blob | none |
+| `delta == 0` and offsets all zero | flat concatenated rows | `link_fragments/<chunk>` |
+| otherwise | inline ragged blob: `int64 K`, `int64 offsets[K]`, then the rows | none |
 
-The intra-chunk case is a flat row block whose per-fragment partition
-lives in the sibling `link_fragments` array.  Every other array — any
-non-zero offset, any `delta ≠ 0` — carries its own ragged framing
-inline
-(`int64 K`, then `int64 offsets[K]`, then the rows) and has no sidecar.
-
-A row is `link_width` integer columns, or `1 + link_width` columns when
-the array carries a permutation index in column 0.
+A row is `link_width` integers, or `1 + link_width` with a permutation
+index in column 0.  Link fragments need not match vertex fragments
+unless the level sets `link_fragments_aligned: true`
+([§7.5](07-core-arrays.md#75-vertex-links)).
 
 ### 10.6.5 Whether a permutation index is present
 
-Endpoint order is sometimes data (a directed edge, a mesh face's
-winding) and sometimes an artifact of how the writer canonicalized the
-record.  `has_perm` says which, and it is stamped on every array so a
-reader never has to infer it:
+`has_perm` is stamped on every array, so readers never infer it:
 
 ```python
 def links_has_perm(offsets, *, delta, directed, store):
@@ -206,26 +129,13 @@ def links_has_perm(offsets, *, delta, directed, store):
     return not directed                      # undirected sorts; directed does not
 ```
 
-So `has_perm` is true exactly when the record is non-intra **and**
-`delta == 0` **and** (`store == "duplicate"` **or** not `directed`).
-
-The canonical sort is what keeps an undirected record from being stored
-twice.  Under `store = "canonical"` with `directed = false`, endpoints
-are sorted by `(chunk_coords, vertex_index)` and the smallest becomes
-the source — which makes **the stored offsets lexicographically
-positive**, so `A→B` and `B→A` are the same cell in the same array
-rather than two.  `perm_idx` is what makes that lossless: it is the
-Lehmer code of the permutation, so a reader recovers the input order —
-mesh-face winding, edge direction — from any stored copy.
-
-A **negative** offsets segment therefore never arises from a canonical
-undirected record.  It appears in exactly two situations: a `directed`
-family, where input order is preserved verbatim and `A→B` and `B→A`
-legitimately file under opposite offsets at different cells; and
-`store = "duplicate"`, where the copy anchored at the larger chunk
-points back at the smaller one.
-
-The family's `directed` and `store` policy fixes what a cell contains:
+Under `store = "canonical"` with `directed = false`, endpoints are
+sorted by `(chunk_coords, vertex_index)` and the smallest becomes the
+source, so stored offsets are lexicographically positive and `A→B` and
+`B→A` share one cell.  `perm_idx`, the Lehmer code of the permutation,
+recovers the input order (face winding, edge direction).  Negative
+offsets therefore arise only in `directed` families and under
+`store = "duplicate"`.
 
 | `directed` | `store` | On disk |
 |------------|---------|---------|
@@ -234,209 +144,256 @@ The family's `directed` and `store` policy fixes what a cell contains:
 | `true` | `canonical` | one cell in input order, no `perm_idx` |
 | `true` | `duplicate` | one copy per distinct incident chunk, `perm_idx` present |
 
-`"canonical"` stores each record once, at one source chunk.
-`"duplicate"` stores one copy per distinct incident chunk, so an
-incidence query on any chunk is a single cell read at the cost of a
-larger store; `num_physical_records` then exceeds `num_links`.
+`"duplicate"` makes any chunk's incidence query one cell read at the
+cost of a larger store; `num_physical_records` then exceeds
+`num_links`.
 
 ### 10.6.6 Metadata
 
-Family group — `links/<delta>/`:
+Each node carries a `zarr_vectors` object and registers the convention
+with `"zarr_conventions": [{"uuid": "66268a61-7833-4995-bbcb-233bb417dae5"}]`.
+Family group `links/<delta>/`, from a graph store:
 
 ```json
 {
-  "zv_array":    "links_family",
-  "level_delta": 0,
-  "link_width":  2,
-  "directed":    false,
-  "store":       "canonical",
-  "sid_ndim":    3,
-  "num_links":            12,
-  "num_physical_records": 12
+  "zarr_conventions": [{"uuid": "66268a61-7833-4995-bbcb-233bb417dae5"}],
+  "zarr_vectors": {
+    "kind": "links_family",
+    "level_delta": 0,
+    "link_width": 2,
+    "directed": false,
+    "store": "canonical",
+    "sid_ndim": 3,
+    "num_links": 396,
+    "num_physical_records": 396
+  }
 }
 ```
 
-`num_links` is the **logical** record count and `num_physical_records`
-the on-disk row count; both are absent until the family is finalized.
-The policy lives on the group precisely because every offsets array
-beneath the delta decodes against it — a conflicting re-stamp MUST be
-rejected.
+`num_links` is the logical record count and `num_physical_records` the
+stored row count; both are absent until the family is finalized.  Every
+offsets array beneath the family decodes against its policy, so a
+conflicting re-stamp MUST be rejected.
 
-Offsets array — `links/<delta>/<offsets>/`:
+A `delta = 0` family MAY carry `element`, declaring that each record is
+one solid cell of a volume mesh rather than an edge or a polygon face:
+
+| `element` | `link_width` | Vertex order |
+|-----------|--------------|--------------|
+| `"tetra"` | 4 | `0, 1, 2` a triangle whose right-hand normal points towards `3` |
+| `"pyramid"` | 5 | base quad `0`–`3` whose right-hand normal points towards the apex `4` |
+| `"wedge"` | 6 | triangle `0, 1, 2` whose right-hand normal points away from triangle `3, 4, 5`; `i` joined to `i + 3` |
+| `"hexahedron"` | 8 | quad `0`–`3` whose right-hand normal points towards quad `4`–`7`; `i` joined to `i + 4` |
+
+The orders are VTK's; in them every cell has positive volume.  Absent
+(or `null`), a record is an edge (`link_width` 2) or a polygon face
+(3 or more), so a store without the field reads as before.
+
+`element: "mixed"` holds several types in one family, listed in
+`element_types` (e.g. `["tetra", "hexahedron"]`).  `link_width` is the
+widest type's, and a shorter cell repeats its last vertex to fill the
+record: a tetrahedron `a b c d` in an 8-wide family is stored
+`a b c d d d d d`.  A cell's vertices are distinct, so the length of a
+record before that trailing run (4, 5, 6 or 8) names its type, under
+any read.
+
+- `element` MUST match `link_width` (for `mixed`, the widest of
+  `element_types`), and MUST NOT appear on a
+  `delta ≠ 0` family: a cell's vertices are all on one pyramid level.
+  They may sit in different chunks, like any record's endpoints.
+- Vertex order MUST survive storage, as for mesh winding
+  ([§12.2](12-geometry-types.md#122-meshes)).
+- Writers SHOULD NOT store cells with non-positive signed volume, and
+  MUST NOT store a cell that repeats a vertex.
+- A writer MUST NOT add, change or remove `element` on a family that
+  already holds records: that would change what the records mean.
+- A reader that does not recognise the value MUST NOT read the records
+  as polygon faces.
+
+Offsets array `links/<delta>/<offsets>/` (`nonempty_chunks` and
+`chunk_grid_origin` omitted); `offsets` is the parsed path segment:
 
 ```json
 {
-  "zv_array":    "links",
-  "dtype":       "int64",
-  "offsets":     [[0, 0, 1]],
-  "has_perm":    true,
-  "link_width":  2,
+  "kind": "links",
+  "dtype": "int64",
+  "offsets": [[0, 0, 1]],
+  "has_perm": true,
+  "link_width": 2,
   "level_delta": 0
 }
 ```
-
-`offsets` is the parsed form of the path segment, so a reader that has
-the array need not re-parse its name.
 
 Attribute family group and array:
 
 ```json
-{ "zv_array": "link_attribute_family", "name": "weight", "level_delta": 0 }
+{ "kind": "link_attribute_family", "name": "weight", "level_delta": 0, "num_links": 396 }
 ```
 ```json
 {
-  "zv_array":    "link_attribute",
-  "name":        "weight",
-  "dtype":       "float32",
-  "row_shape":   [],
-  "offsets":     [[0, 0, 1]],
+  "kind": "link_attribute",
+  "name": "weight",
+  "dtype": "float32",
+  "row_shape": [],
+  "offsets": [[0, 0, 1]],
   "level_delta": 0
 }
 ```
 
-An attribute cell is always a flat dense blob — one row per record in
-the parallel link cell, in the same order — because the record
-boundaries come from the link array.  There is no encoding branch.
+An attribute cell is always flat: one row per record of the parallel
+link cell, in the same order.
 
 ### 10.6.7 Enumeration order
 
-Records enumerate in **`(offsets segment, cell)` sorted order**.  Note
-that `+` (`0x2b`) and `-` (`0x2d`) both sort *before* `0` (`0x30`), so
-the all-zero intra-chunk segment sorts **last**:
+Records enumerate in `(offsets segment, cell)` sorted order.  `+`
+(`0x2b`) and `-` (`0x2d`) sort before `0` (`0x30`), so the intra-chunk
+segment sorts **last**:
 
 ```python
 sorted(['0.0.0', '0.0.+1', '0.0.-1', '+1.0.0', '-1.0.0'])
 # ['+1.0.0', '-1.0.0', '0.0.+1', '0.0.-1', '0.0.0']
-#                                          ^^^^^^^ intra is LAST
 ```
 
-A writer that assumes intra-chunk records come first will mis-align any
-parallel array it builds by iteration order.
+A writer building a parallel array by iteration order must not assume
+intra-chunk records come first.
 
 ### 10.6.8 Validation rules
 
-1. Every child of `links/<delta>/` is an array whose name parses as a
-   valid offsets segment under the family's `link_width` and
-   `sid_ndim` (§10.6.3).
-2. `has_perm` on each array equals `links_has_perm(...)` computed from
-   the family policy (§10.6.5).
-3. Row width is `link_width + (1 if has_perm else 0)`; a cell's byte
-   length is an exact multiple of one row.
-4. Every `vi_k` is within the vertex count of chunk `src + o_k`, and
-   that chunk exists at the endpoint's level — the owning level for
-   `o_0`, `owning + delta` for the rest.
+1. Every child of `links/<delta>/` is an array whose name is a valid
+   offsets segment for the family's `link_width` and `sid_ndim`
+   ([§10.6.3](#1063-the-offsets-segment)).
+2. Each array's `has_perm` equals `links_has_perm(...)` for the family
+   policy ([§10.6.5](#1065-whether-a-permutation-index-is-present)).
+3. Row width is `link_width + (1 if has_perm else 0)`, and a cell's
+   byte length is a whole number of rows.
+4. Every `vi_k` is below the vertex count of chunk `src + o_k`, which
+   exists at the endpoint's level (`owning` for `o_0`, `owning + delta`
+   otherwise).
 5. The intra array at `delta == 0` has a `link_fragments` cell for
    every cell it populates; no other array has one.
-6. For every populated attribute cell, its row count equals the record
-   count of the link cell at the same coordinate in the array with the
-   same offsets segment.  A desynchronized write fails loudly at read
-   time.
-7. When present, `num_links` and `num_physical_records` agree with the
-   records actually stored; `num_physical_records ≥ num_links`, with
-   equality unless `store == "duplicate"`.
+6. Every populated attribute cell has as many rows as the parallel link
+   cell has records.
+7. When present, `num_links` and `num_physical_records` match the
+   stored records; `num_physical_records ≥ num_links`, equal unless
+   `store == "duplicate"`.
+8. Under `link_fragments_aligned: true`, every intra-chunk record in
+   link fragment `k` has its first endpoint in vertex fragment `k` of
+   the same chunk, and vice versa.
+9. When present, `element` is one of `tetra`, `pyramid`, `wedge`,
+   `hexahedron` or `mixed`, its width (for `mixed`, the widest of
+   `element_types`) equals `link_width`, and the family's `delta` is 0.
+   In a `mixed` family every record's length before its trailing run of
+   repeats names one of `element_types`.
 
 ### 10.6.9 Worked examples
 
-`sid_ndim = 3` throughout.  A record's source chunk is the cell it is
-written to; the other endpoints are read off the path.
+`sid_ndim = 3`.  The source chunk is the cell; other endpoints come
+from the path.
 
 | Case | Array | Cell | Row | Reads as |
 |------|-------|------|-----|----------|
-| Intra-chunk edge, `L=2` | `links/0/0.0.0` | `(4,2,7)` | `[5, 2]` | vertices 5 and 2, both in chunk `(4,2,7)` |
+| Intra-chunk edge, `L=2` | `links/0/0.0.0` | `(4,2,7)` | `[5, 2]` | vertices 5 and 2, both in `(4,2,7)` |
 | Edge across `+z`, `L=2` | `links/0/0.0.+1` | `(4,2,7)` | `[0, 5, 2]` | `perm_idx=0`; vertex 5 in `(4,2,7)`, vertex 2 in `(4,2,8)` |
-| Edge across `-x`, `L=2`, `directed` | `links/0/-1.0.0` | `(4,2,7)` | `[5, 2]` | input order kept, no `perm_idx`; a negative offset only arises this way |
-| Intra-chunk triangle, `L=3` | `links/0/0.0.0_0.0.0` | `(4,2,7)` | `[5, 3, 7]` | all three vertices in `(4,2,7)` |
-| Triangle across two seams, `L=3` | `links/0/0.0.+1_0.+1.0` | `(4,2,7)` | `[0, 5, 3, 7]` | vertex 5 in `(4,2,7)`, vertex 3 in `(4,2,8)`, vertex 7 in `(4,3,7)` |
+| Edge across `-x`, `L=2`, `directed` | `links/0/-1.0.0` | `(4,2,7)` | `[5, 2]` | input order, no `perm_idx` |
+| Intra-chunk triangle, `L=3` | `links/0/0.0.0_0.0.0` | `(4,2,7)` | `[5, 3, 7]` | all in `(4,2,7)` |
+| Triangle across two seams, `L=3` | `links/0/0.0.+1_0.+1.0` | `(4,2,7)` | `[0, 5, 3, 7]` | 5 in `(4,2,7)`, 3 in `(4,2,8)`, 7 in `(4,3,7)` |
 | Parent reference, `L=1` | `links/+1/self` | `(4,2,7)` | `[9]` | vertex 9 of the anchored chunk one level coarser |
-
-Chunk identity comes from the cell coordinate plus the offsets segment;
-nothing in the record names a chunk.
 
 ### 10.6.10 Reader access patterns
 
-"Which records leave chunk `c` toward its `+z` neighbour?" is one cell
-read:
+"Which records leave chunk `c` toward `+z`?" is one cell read:
 
 ```python
 arr  = level["links"]["0"]["0.0.+1"]
-o    = arr.attrs.get("chunk_grid_origin", (0,) * ndim)
+zv   = arr.attrs["zarr_vectors"]
+o    = zv.get("chunk_grid_origin", (0,) * ndim)
 cell = tuple(ci - oi for ci, oi in zip(c, o))
-records = decode(arr[cell], link_width=L, has_perm=arr.attrs["has_perm"])
+records = decode(arr[cell], link_width=L, has_perm=zv["has_perm"])
 ```
 
-"Every record incident on chunk `c`, in any direction" is one cell read
-per offsets segment under the delta — `list(level["links"]["0"])` names
-them.  Under `store = "duplicate"` it collapses to reading chunk `c`'s
-cell in every segment and taking the records verbatim, with no need to
-visit the neighbours.
+"Every record incident on `c`" is one cell read per offsets segment
+(`list(level["links"]["0"])` names them); under `store = "duplicate"`
+it needs only chunk `c`'s cells.
 
 ## 10.7 Consistency Guarantees
 
-- **Chunk-local vertex indices.**  No record stores a global vertex
-  ID.  Every `vi_k` is local to chunk `src + o_k`, and that chunk is
-  recovered from the cell coordinate plus the path — so there is
-  nothing to reconstruct and no global-ID space to keep consistent.
+- **Chunk-local indices.**  No record stores a global vertex id; each
+  `vi_k` is local to chunk `src + o_k`.
 - **Attribute parity.**  `link_attributes/<name>/<delta>/<offsets>`
-  mirrors `links/<delta>/<offsets>` exactly: same offsets segments,
-  same cells, same per-cell row order.  Rows align 1:1 without storing
-  a row id.
+  mirrors `links/<delta>/<offsets>`: same segments, cells and row order.
 - **Uniform family policy.**  `link_width`, `sid_ndim`, `directed` and
-  `store` are properties of the whole `<delta>` family, not of an
-  individual offsets array.  A store that needs two link widths at one
-  level needs two deltas, not two segments.
-- **Referential integrity.**  A record naming chunk `src + o_k` obliges
-  that chunk to exist and to have at least `vi_k + 1` vertices at the
-  endpoint's level.  Deleting a chunk without deleting the records that
-  reach into it leaves the store invalid.
+  `store` belong to the whole `<delta>` family; two link widths at one
+  level need two deltas.
+- **Referential integrity.**  A record naming chunk `src + o_k` requires
+  that chunk to exist with at least `vi_k + 1` vertices at the
+  endpoint's level; deleting a chunk without the records that reach
+  into it leaves the store invalid.
 - **Finalize before sharding.**  `num_links` and
-  `num_physical_records` must be written before the store is sharded.
-  Once cells are packed into shard files a shard's inner index is no
-  longer derivable from chunk-file names, so counts that would have
-  been recovered by listing cannot be.
+  `num_physical_records` must be written before the store is sharded,
+  since they can no longer be recovered by listing cell files.
 
 ## 10.8 Cross-Pyramid-Level Links — Optional
 
 Records with `delta ≠ 0` connect a chunk at the owning level to chunks
-at `owning + delta`.  They are emitted only when `cross_level_storage`
-∈ {`implicit`, `explicit`} — see
-[§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional).
+at `owning + delta`.  They are written only when `cross_level_storage`
+is `implicit` or `explicit`
+([§9.6](09-multi-resolution-support.md#96-multiscale-link-arrays--optional)).
 
 ### Offsets are measured in the target level's grid
 
-Under `delta ≠ 0` the offsets are **not** the raw coordinate difference
-between the two chunks.  They are measured against the source chunk
-*re-anchored into the target level's grid*:
+The offsets are measured from the source chunk re-anchored into the
+target level's grid, not from the raw coordinate difference:
 
 ```
 anchor = floor(c_src * r_src / r_trg)
 o      = c_trg - anchor            # decode:  c_trg = anchor + o
 ```
 
-where `r_src` and `r_trg` are the two levels' chunk-shape multipliers
-relative to root (see [§9.3](09-multi-resolution-support.md#93-spatial-chunk-scaling)).
-This matters whenever the coarse level grows `chunk_shape`: without
-re-anchoring, two source chunks in the same geometric relationship to
-their parent produce different raw differences, and the same physical
-relationship would scatter across several offsets segments.  With it,
-both produce the same offset and land in one array.
+`r_src` and `r_trg` are the levels' chunk-shape multipliers
+([§9.3](09-multi-resolution-support.md#93-spatial-chunk-scaling)).  This
+keeps one physical relationship in one array when the coarse level
+grows `chunk_shape`.
 
 ### Emission rules
 
-- Endpoint 0 is always the source, at the owning level; endpoints
-  `k > 0` are at `owning + delta`.
-- Every `delta ≠ 0` array therefore has `has_perm = false`, uses the
-  inline ragged encoding, and has no `link_fragments` sidecar.
-- `link_width = 1` — a bare parent or child reference — writes to the
-  `self` segment, whose record is a single vertex index.
-- Under `cross_level_storage = "explicit"` both directions are
-  materialized (`+N` at the finer level, `-N` at the coarser);
-  `"implicit"` writes only the positive delta and leaves the reverse to
-  be computed at read time.
+- Endpoint 0 is the source at the owning level; endpoints `k > 0` are at
+  `owning + delta`.
+- Every `delta ≠ 0` array has `has_perm = false`, the inline ragged
+  encoding and no `link_fragments`.
+- `link_width = 1` uses the `self` segment.
+- `"explicit"` storage writes `+N` at the finer level and `-N` at the
+  coarser; `"implicit"` writes only `+N`.
 
 ### Known limitation
 
-The `<delta>` segment is uniform across all of a record's non-source
-endpoints.  A record whose endpoints sit at *different* levels — a
-triangle at levels `(N, N, N+1)`, say — cannot be expressed.  Such a
-record must be decomposed, or the geometry rewritten so that all
-non-source endpoints share one level.
+`<delta>` is shared by all of a record's non-source endpoints, so a
+record whose endpoints are at different levels (a triangle at `(N, N,
+N+1)`) cannot be expressed and must be decomposed.
+
+## 10.9 Links on an Octree Level
+
+On a level with octree chunks ([§6.5](06-spatial-indexing.md#65-octree-chunks))
+a neighbour may be coarser than the source, so `links/0/<segment>`
+names the other endpoint by offset and depth change:
+
+- A link is filed under its **source leaf** — the deeper endpoint, or
+  at equal depth the one with the smaller anchor — in the cell of the
+  source's anchor.
+- The other endpoint, `Δ ≥ 0` depths coarser, is named by its offset
+  `o ∈ {-1, 0, 1}³` from the source's ancestor at that depth:
+
+  ```text
+  other = (d - Δ, (i >> Δ) + o_x, (j >> Δ) + o_y, (k >> Δ) + o_z)
+  ```
+
+- The segment is `o` written as in [§10.6.3](#1063-the-offsets-segment),
+  with `^Δ` appended when `Δ > 0`: `0.0.0` the same leaf, `+1.0.0` the
+  same-depth leaf along `+x`, `-1.0.0^1` the leaf along `−x` of the
+  source's parent.
+- Rows are `(source row, other row)`, each local to its leaf.  A
+  balanced level has at most 26 + 26 segments besides `0.0.0`.
+
+Octree links are undirected, `canonical`, width 2, between adjacent
+cells, at `delta = 0` only.  A reader without octree support MUST NOT
+read such a level; the `octree_chunks` required capability and marker
+codec stop it first.

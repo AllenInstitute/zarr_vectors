@@ -1,0 +1,45 @@
+{
+  "zarr_format": 3,
+  "node_type": "group",
+  "attributes": {
+    "zarr_conventions": [
+      {
+        "uuid": "66268a61-7833-4995-bbcb-233bb417dae5"
+      },
+      {
+        "uuid": "d35379db-88df-4056-af3a-620245f8e347"
+      }
+    ],
+    "zarr_vectors": {
+      "kind": "root",
+      "zv_version": "0.10.0",
+      "axes": [
+        {
+          "name": "y",
+          "type": "space"
+        },
+        {
+          "name": "x",
+          "type": "space"
+        }
+      ],
+      "chunk_shape": [
+        100.0,
+        100.0
+      ],
+      "bounds": [
+        [
+          0,
+          0
+        ],
+        [
+          100,
+          100
+        ]
+      ],
+      "geometry_types": [
+        "point_cloud"
+      ]
+    }
+  }
+}

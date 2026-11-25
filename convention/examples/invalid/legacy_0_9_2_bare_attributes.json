@@ -1,0 +1,51 @@
+{
+  "zarr_format": 3,
+  "node_type": "array",
+  "shape": [
+    5,
+    5,
+    5
+  ],
+  "data_type": "variable_length_bytes",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        1
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "",
+  "codecs": [
+    {
+      "name": "vlen-bytes",
+      "configuration": {}
+    },
+    {
+      "name": "zstd",
+      "configuration": {
+        "level": 0,
+        "checksum": false
+      }
+    }
+  ],
+  "attributes": {
+    "zarr_conventions": [
+      {
+        "uuid": "66268a61-7833-4995-bbcb-233bb417dae5"
+      }
+    ],
+    "zv_array": "vertices",
+    "dtype": "float32",
+    "encoding": "raw"
+  },
+  "storage_transformers": []
+}

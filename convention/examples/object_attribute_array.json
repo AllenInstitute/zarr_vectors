@@ -1,0 +1,55 @@
+{
+  "zarr_format": 3,
+  "node_type": "array",
+  "shape": [
+    41873
+  ],
+  "data_type": "float32",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        16384
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "bytes",
+      "configuration": {
+        "endian": "little"
+      }
+    },
+    {
+      "name": "zstd",
+      "configuration": {
+        "level": 0,
+        "checksum": false
+      }
+    }
+  ],
+  "attributes": {
+    "zarr_conventions": [
+      {
+        "uuid": "66268a61-7833-4995-bbcb-233bb417dae5"
+      }
+    ],
+    "zarr_vectors": {
+      "kind": "object_attribute",
+      "name": "volume",
+      "dtype": "float32",
+      "shape": [
+        41873
+      ],
+      "fill_sentinel_meaning": "absent"
+    }
+  },
+  "storage_transformers": []
+}
